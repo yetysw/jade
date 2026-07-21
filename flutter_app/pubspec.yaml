@@ -1,0 +1,37 @@
+name: jade
+description: "Jade - assistant documentaire interne Jade (interface native Flutter)."
+publish_to: 'none'
+
+# v1.0.0 — premiere version stable (interface native Flutter + backend local)
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # HTTP + flux SSE vers le backend local (127.0.0.1:8765)
+  http: ^1.2.0
+  # rendu markdown des reponses (titres, listes, tableaux, code)
+  flutter_markdown: ^0.7.4
+  markdown: ^7.2.1
+  # NB plugins natifs (window_manager, file_picker) ajoutes en phase 2 :
+  # ils exigent le Mode developpeur Windows (symlinks).
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    # Geomini (Google Fonts) — police variable, axe de poids wght
+    - family: Geomini
+      fonts:
+        - asset: assets/fonts/Geomini.ttf
+    # Tabler Icons (tabler.io/icons, MIT) — jeu d'icônes de l'app
+    - family: Tabler
+      fonts:
+        - asset: assets/fonts/TablerIcons.ttf

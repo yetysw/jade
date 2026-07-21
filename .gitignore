@@ -1,0 +1,28 @@
+# === Jade — .gitignore ===
+# Les secrets NE sont PAS versionnés. La configuration se fait via .env (dev,
+# copié depuis .env.example) ou via l'assistant d'installation (poste client),
+# qui écrit un .env local. Aucun jeton/mot de passe dans le dépôt ni l'exe.
+
+# Fichiers de configuration contenant des secrets (locaux à chaque poste)
+.env
+installer/env.prod
+
+# Environnement Python (régénérable : pip install -e .)
+.venv/
+
+# Données locales régénérables (index, journaux, cache modèles)
+data/
+logs/
+models/
+
+# Corpus de test réel (fichiers clients volumineux — non versionnés)
+testdata/
+
+# Artefacts de build (régénérables : PyInstaller + Inno Setup)
+build/
+dist/
+
+# Caches
+__pycache__/
+*.egg-info/
+*.pyc

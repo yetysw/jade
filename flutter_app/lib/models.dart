@@ -1,0 +1,225 @@
+/// Modèles de données — miroir des réponses JSON du backend local (ragagent).
+library;
+
+class AppStatus {
+  final String username;
+  final String appVersion;
+  final bool? llmOk;
+  final int chunksIndexed;
+
+  AppStatus({
+    required this.username,
+    required this.appVersion,
+    required this.llmOk,
+    required this.chunksIndexed,
+  });
+
+  factory AppStatus.fromJson(Map<String, dynamic> j) => AppStatus(
+        username: j['username'] ?? 'Utilisateur',
+        appVersion: j['app_version'] ?? '',
+        llmOk: j['llm_ok'],
+        chunksIndexed: j['chunks_indexed'] ?? 0,
+      );
+}
+
+class Folder {
+  final String id;
+  final String name;
+  Folder({required this.id, required this.name});
+
+  factory Folder.fromJson(Map<String, dynamic> j) =>
+      Folder(id: j['id'], name: j['name'] ?? '');
+}
+
+class Conversation {
+  final String id;
+  String title;
+  final bool pinned;
+  final String? folderId;
+  final String updatedAt;
+
+  Conversation({
+    required this.id,
+    required this.title,
+    required this.pinned,
+    required this.folderId,
+    required this.updatedAt,
+  });
+
+  factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
+        id: j['id'],
+        title: j['title'] ?? 'Conversation',
+        pinned: (j['pinned'] ?? 0) == 1 || j['pinned'] == true,
+        folderId: j['folder_id'],
+        updatedAt: j['updated_at'] ?? '',
+      );
+}
+
+class Source {
+  final int n;
+  final String label;
+  final String filename;
+  final String path;
+  final String url;
+  final bool web;
+  final String detail;
+  final String text;
+
+  Source({
+    required this.n,
+    required this.label,
+    required this.filename,
+    required this.path,
+    required this.url,
+    required this.web,
+    required this.detail,
+    required this.text,
+  });
+
+  factory Source.fromJson(Map<String, dynamic> j) => Source(
+        n: j['n'] ?? 0,
+        label: j['label'] ?? '',
+        filename: j['filename'] ?? '',
+        path: j['path'] ?? '',
+        url: j['url'] ?? '',
+        web: j['web'] == true,
+        detail: j['detail'] ?? '',
+        text: j['text'] ?? '',
+      );
+}
+
+class MsgAttachment {
+  final String name;
+  final String path;
+  final String kind; // 'doc' | 'image'
+  MsgAttachment({required this.name, required this.path, required this.kind});
+
+  factory MsgAttachment.fromJson(Map<String, dynamic> j) => MsgAttachment(
+        name: j['name'] ?? 'fichier',
+        path: j['path'] ?? '',
+        kind: j['kind'] ?? 'doc',
+      );
+}
+
+/// Dossier / racine d'indexation (réglages admin).
+class IndexRoot {
+  final String path;
+  final bool online;
+  IndexRoot({required this.path, required this.online});
+
+  factory IndexRoot.fromJson(Map<String, dynamic> j) =>
+      IndexRoot(path: j['path'] ?? '', online: j['online'] == true);
+}
+
+class IndexSettings {
+  final List<IndexRoot> roots;
+  final int chunksIndexed;
+  final bool indexing;
+  IndexSettings(
+      {required this.roots,
+      required this.chunksIndexed,
+      required this.indexing});
+
+  factory IndexSettings.fromJson(Map<String, dynamic> j) => IndexSettings(
+        roots: ((j['roots'] ?? []) as List)
+            .map((r) => IndexRoot.fromJson(r as Map<String, dynamic>))
+            .toList(),
+        chunksIndexed: j['chunks_indexed'] ?? 0,
+        indexing: j['indexing'] == true,
+      );
+}
+
+/// Suggestion d'accueil personnalisée (générée d'après l'historique).
+class Suggestion {
+  final String kind; // docs | web | file
+  final String prompt;
+  const Suggestion({required this.kind, required this.prompt});
+
+  factory Suggestion.fromJson(Map<String, dynamic> j) =>
+      Suggestion(kind: j['kind'] ?? 'docs', prompt: j['prompt'] ?? '');
+}
+
+class Message {
+  final int? id;
+  final String role; // 'user' | 'assistant'
+  String content;
+  List<Source>? sources;
+  List<MsgAttachment> attachments;
+  List<String> followups; // questions de suivi suggérées (réponse en direct)
+  final String? createdAt;
+  bool streaming;
+
+  Message({
+    this.id,
+    required this.role,
+    required this.content,
+    this.sources,
+    this.attachments = const [],
+    this.followups = const [],
+    this.createdAt,
+    this.streaming = false,
+  });
+
+  factory Message.fromJson(Map<String, dynamic> j) => Message(
+        id: j['id'],
+        role: j['role'] ?? 'assistant',
+        content: j['content'] ?? '',
+        sources: j['sources'] == null
+            ? null
+            : (j['sources'] as List)
+                .map((s) => Source.fromJson(s as Map<String, dynamic>))
+                .toList(),
+        attachments: j['attachments'] == null
+            ? []
+            : (j['attachments'] as List)
+                .map((a) => MsgAttachment.fromJson(a as Map<String, dynamic>))
+                .toList(),
+        createdAt: j['created_at'],
+      );
+}
+
+/// Événements du flux SSE de /ask.
+sealed class AskEvent {}
+
+class TokenEvent extends AskEvent {
+  final String delta;
+  TokenEvent(this.delta);
+}
+
+class SourcesEvent extends AskEvent {
+  final List<Source> sources;
+  SourcesEvent(this.sources);
+}
+
+class FileEvent extends AskEvent {
+  final String path;
+  final String name;
+  FileEvent(this.path, this.name);
+}
+
+class NoticeEvent extends AskEvent {
+  final String message;
+  NoticeEvent(this.message);
+}
+
+class ProgressEvent extends AskEvent {
+  final String message;
+  ProgressEvent(this.message);
+}
+
+class FollowupsEvent extends AskEvent {
+  final List<String> questions;
+  FollowupsEvent(this.questions);
+}
+
+class ResetEvent extends AskEvent {}
+
+class DoneEvent extends AskEvent {
+  final bool interrupted;
+  DoneEvent(this.interrupted);
+}
+
+class ErrorEvent extends AskEvent {
+  final String message;
+  ErrorEvent(this.message);
+}
