@@ -6,4 +6,4 @@ vector store, retrieval) est local. Seul un payload texte minimal
 """
 
 # Versionnage sémantique MAJEUR.MINEUR.CORRECTIF (voir CHANGELOG.md).
-__version__ = "1.4.0"
+__version__ = "1.4.1"

@@ -7,7 +7,24 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
-## 1.4.0 — 🚧 dev : ⭐ Démarrage progressif + installateur protégé
+## 1.4.1 — Correctif : téléchargement des modèles fiable
+
+- **Cause du téléchargement « bloqué » au 1er lancement identifiée** : les
+  requêtes **non authentifiées** vers HuggingFace sont **bridées** (rate-limit),
+  un fichier reste « pendu » plusieurs minutes → barre figée (constaté :
+  message HF « set a HF_TOKEN to enable higher rate limits »).
+- **Durcissement HuggingFace** (repli) : `HF_HUB_DOWNLOAD_TIMEOUT=30` (plus de
+  blocage infini) + **boucle de reprise** (les fichiers partiels sont repris).
+- **Source Jade (Gitea) prioritaire** (`MODELS_URL`) : au 1er lancement, les
+  modèles sont tirés d'une **archive `.tar` hébergée par Jade** au lieu de
+  HuggingFace — **une seule requête**, **reprise** sur coupure (HTTP Range),
+  **timeouts + retries**. `models_fetch.py`. Repli automatique sur HuggingFace si
+  l'archive est indisponible. Validé E2E : download + progression précise +
+  extraction + rechargement 100 % hors-ligne + reprise sans corruption.
+
+---
+
+## 1.4.0 — ⭐ Démarrage progressif + installateur protégé
 
 - ⭐ **Écran de démarrage avec progression** : le téléchargement des modèles de
   recherche (au 1er lancement, ~2 Go) et leur chargement ne **bloquent plus** le

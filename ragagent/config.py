@@ -11,6 +11,12 @@ from dotenv import load_dotenv
 from platformdirs import site_data_dir
 from platformdirs import user_data_dir as _user_data_dir
 
+# HuggingFace : sans ce timeout, un téléchargement bridé (rate-limit HF sur les
+# requêtes non authentifiées) peut rester « pendu » indéfiniment → barre figée au
+# 1er lancement. Avec un timeout, une connexion muette échoue et notre boucle de
+# reprise repart (huggingface_hub reprend les fichiers partiels).
+os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "30")
+
 FROZEN = getattr(sys, "frozen", False)  # exécutable PyInstaller (application installée)
 
 if FROZEN:
@@ -88,6 +94,10 @@ class Settings:
     gitea_repo: str  # "owner/repo", ex. "example/jade"
     gitea_token: str  # jeton lecture (dépôt privé) ; vide si public
     setup_password: str  # mot de passe de l'installateur chiffré (auto-update silencieux)
+    # URL d'une archive .tar des modèles hébergée par Jade (Gitea) : téléchargée
+    # au 1er lancement au lieu de HuggingFace (fiable, sur votre infra). Vide =
+    # HuggingFace directement. Voir models_fetch.py.
+    models_url: str
 
     # Extensions prises en charge par les parseurs (voir ingest/parsers.py)
     extensions: tuple[str, ...] = field(
@@ -199,4 +209,8 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         gitea_repo=get("GITEA_REPO", "example/jade").strip("/ "),
         gitea_token=get("GITEA_TOKEN", ""),
         setup_password=get("SETUP_PASSWORD", ""),
+        models_url=get(
+            "MODELS_URL",
+            "https://git.example.com/example/jade/releases/download/models/jade-models.tar",
+        ).strip(),
     )
