@@ -538,9 +538,10 @@ class _MessageTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              const JadeMark(size: 22),
+              // le logo tourne pendant toute la génération (indicateur d'activité)
+              JadeMark(size: 22, animate: message.streaming),
               const SizedBox(width: JadeSpace.sm),
-              Text('Jade',
+              Text(message.streaming ? 'Jade réfléchit…' : 'Jade',
                   style: JadeType.caption.copyWith(
                       color: jade.muted, fontWeight: FontWeight.w700)),
             ],
@@ -552,13 +553,6 @@ class _MessageTile extends StatelessWidget {
               sources: message.sources,
               onCite: (n) => home.showSources(message.sources ?? const [], n),
               onLink: (url) => api.openUrl(url),
-            ),
-          // animation visible pendant TOUTE la génération : points « en train
-          // d'écrire » avant le premier token, puis sous le texte qui stream
-          if (message.streaming)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: JadeSpace.sm),
-              child: _TypingDots(color: jade.secondary),
             ),
           // fichiers créés par Jade — cartes cliquables
           ...message.attachments.map((a) => _FileCard(att: a, api: api)),
@@ -674,64 +668,6 @@ class _SourcesChip extends StatelessWidget {
       ),
     );
   }
-}
-
-class _TypingDots extends StatefulWidget {
-  final Color color;
-  const _TypingDots({required this.color});
-  @override
-  State<_TypingDots> createState() => _TypingDotsState();
-}
-
-class _TypingDotsState extends State<_TypingDots>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1050))
-      ..repeat();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // si les animations sont désactivées, on montre trois points statiques
-    if (context.motion(const Duration(milliseconds: 1)) == Duration.zero) {
-      return _dot(1);
-    }
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(3, (i) {
-            final t = (_c.value - i * 0.18) % 1.0;
-            final o = 0.35 + 0.65 * (t < 0.5 ? t * 2 : (1 - t) * 2);
-            return Padding(
-              padding: const EdgeInsets.only(right: 5),
-              child: _dot(o.clamp(0.35, 1.0)),
-            );
-          }),
-        );
-      },
-    );
-  }
-
-  Widget _dot(double opacity) => Container(
-        width: 7,
-        height: 7,
-        decoration: BoxDecoration(
-          color: widget.color.withValues(alpha: opacity),
-          shape: BoxShape.circle,
-        ),
-      );
 }
 
 // ---------------------------------------------------- markdown + citations

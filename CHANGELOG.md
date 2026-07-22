@@ -7,6 +7,16 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.1.0 — 🚧 en cours (branche `dev`)
+
+- ⭐ **Logo** : retour au **logo spirale** de Jade partout (application, icône
+  .exe / barre des tâches, installateur, dépôt). La gemme bleue est retirée.
+- **Animation de génération** : le logo **tourne** pendant que Jade réfléchit /
+  répond (respecte « réduire les animations »).
+- 🚧 Préparation du **support multiplateforme** (macOS / Linux).
+
+---
+
 ## 1.0.0 — Première version stable
 
 Assistant documentaire interne « local d'abord » : Jade indexe les documents de
