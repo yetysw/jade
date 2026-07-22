@@ -5,7 +5,7 @@
 
   **Assistant documentaire d'entreprise, « local d'abord »**
 
-  ![Version](https://img.shields.io/badge/version-1.1.0-00357F)
+  ![Version](https://img.shields.io/badge/version-1.2.0-00357F)
   ![Plateforme](https://img.shields.io/badge/Windows-10%2F11-informational)
   ![UI](https://img.shields.io/badge/interface-Flutter%20native-blue)
   ![Licence](https://img.shields.io/badge/licence-Jade%20S%C3%A0rl-lightgrey)
@@ -80,7 +80,9 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 
 ## Prérequis
 
-- Windows 10/11 (x64).
+- **Windows 10/11** (x64) — plateforme livrée. Le code est **prêt pour macOS et
+  Linux** (backend portable, runners Flutter générés) ; restent les builds et
+  installateurs natifs à produire sur ces OS.
 - Accès réseau sortant HTTPS vers `llm.example.com` et `search.example.com`.
 - Pour le **développement** : Python **3.12+** et le **SDK Flutter** (canal stable,
   desktop Windows activé).

@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import gc
 import logging
+import sys
 
 log = logging.getLogger(__name__)
 
 
 def trim_working_set() -> None:
     gc.collect()
+    if sys.platform != "win32":
+        return  # macOS/Linux : le GC + le système gèrent la mémoire
     try:
         import ctypes
 

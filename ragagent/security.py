@@ -1,37 +1,45 @@
-"""Chiffrement au repos via EFS (Encrypting File System de Windows).
+"""Chiffrement au repos.
 
-Marque les dossiers de données (index partagé, conversations par utilisateur)
-comme chiffrés : Windows chiffre alors le contenu de façon transparente, lié au
-compte propriétaire (idéal pour les conversations par session RDS) ou au compte
-de service (index partagé). Aucune clé à gérer côté application.
+Sur **Windows** : DPAPI pour les chaînes (conversations) + EFS pour marquer les
+dossiers de données comme chiffrés, de façon transparente, lié au compte
+propriétaire. Aucune clé à gérer côté application.
 
-Best-effort : EFS n'est pas disponible sur toutes les éditions/systèmes de
-fichiers (FAT, certains partages réseau) ; on journalise et on continue.
+Sur **macOS / Linux** : ces API n'existent pas. Le stockage se fait alors en
+clair (dégradation contrôlée) — le confinement local (poste, permissions du
+système de fichiers) reste la première ligne de défense. Un chiffrement portable
+(keyring / cryptography) pourra être ajouté ultérieurement sans changer l'API.
+
+Best-effort partout : on journalise et on continue.
 """
 
 from __future__ import annotations
 
 import base64
-import ctypes
 import logging
-from ctypes import wintypes
+import sys
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 DPAPI_PREFIX = "dpapi:"
+_WINDOWS = sys.platform == "win32"
 
+if _WINDOWS:
+    import ctypes
+    from ctypes import wintypes
 
-class _DATA_BLOB(ctypes.Structure):
-    _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+    class _DATA_BLOB(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD),
+                    ("pbData", ctypes.POINTER(ctypes.c_char))]
 
-
-def _blob(data: bytes):
-    buf = ctypes.create_string_buffer(data, len(data))
-    return _DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    def _blob(data: bytes):
+        buf = ctypes.create_string_buffer(data, len(data))
+        return _DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
 
 
 def dpapi_available() -> bool:
+    if not _WINDOWS:
+        return False
     try:
         return protect("test").startswith(DPAPI_PREFIX)
     except Exception:
@@ -40,7 +48,9 @@ def dpapi_available() -> bool:
 
 def protect(text: str) -> str:
     """Chiffre une chaîne avec DPAPI (clé dérivée du compte Windows courant).
-    Retourne 'dpapi:<base64>'. Lève OSError si indisponible."""
+    Retourne 'dpapi:<base64>'. Lève OSError si indisponible (hors Windows)."""
+    if not _WINDOWS:
+        raise OSError("DPAPI indisponible (Windows uniquement)")
     blob_in = _blob(text.encode("utf-8"))
     blob_out = _DATA_BLOB()
     if not ctypes.windll.crypt32.CryptProtectData(
@@ -55,7 +65,7 @@ def protect(text: str) -> str:
 def unprotect(value: str) -> str:
     """Déchiffre une valeur 'dpapi:<base64>'. Une valeur sans préfixe est
     renvoyée telle quelle (rétro-compatibilité avec des données en clair)."""
-    if not value.startswith(DPAPI_PREFIX):
+    if not value.startswith(DPAPI_PREFIX) or not _WINDOWS:
         return value
     data = base64.b64decode(value[len(DPAPI_PREFIX):])
     blob_in = _blob(data)
@@ -70,9 +80,11 @@ def unprotect(value: str) -> str:
 
 
 def encrypt_at_rest(path: Path) -> bool:
-    """Chiffre un dossier (les nouveaux fichiers créés dedans le seront aussi)."""
+    """Marque un dossier comme chiffré (EFS). No-op hors Windows."""
+    path.mkdir(parents=True, exist_ok=True)
+    if not _WINDOWS:
+        return False
     try:
-        path.mkdir(parents=True, exist_ok=True)
         ok = bool(ctypes.windll.advapi32.EncryptFileW(str(path)))
         if not ok:
             err = ctypes.get_last_error()

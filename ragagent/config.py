@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
+from platformdirs import site_data_dir
+from platformdirs import user_data_dir as _user_data_dir
 
 FROZEN = getattr(sys, "frozen", False)  # exécutable PyInstaller (application installée)
 
@@ -16,9 +18,10 @@ if FROZEN:
     # (écrit par l'assistant d'installation, modifiable par l'admin).
     PROJECT_ROOT = Path(sys.executable).resolve().parent
     BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT))
-    # Program Files est en lecture seule : index partagé, journaux et cache de
-    # modèles vont dans %PROGRAMDATA%\Jade (droits élargis posés par l'installateur).
-    _SHARED = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "Jade"
+    # Données partagées (index, journaux, cache modèles) dans le dossier système
+    # standard : %PROGRAMDATA%\Jade (Windows), /Library/Application Support/Jade
+    # (macOS), /usr/local/share/Jade (Linux) — via platformdirs.
+    _SHARED = Path(site_data_dir("Jade", appauthor=False))
     _DEF_DOCS = str(_SHARED / "documents")
     _DEF_DATA = str(_SHARED / "data")
     _DEF_LOGS = str(_SHARED / "logs")
@@ -102,12 +105,10 @@ class Settings:
 
     @property
     def user_data_dir(self) -> Path:
-        """Dossier par utilisateur Windows (%LOCALAPPDATA%\\Jade) : les
-        conversations de chaque session y sont isolées. Local (non itinérant) :
-        elles restent sur la machine et se prêtent au chiffrement EFS. Repli sur
-        %APPDATA% puis data_dir."""
-        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
-        return (Path(base) / "Jade") if base else (self.data_dir / "user")
+        """Dossier par utilisateur : les conversations de chaque session y sont
+        isolées (local, non itinérant). %LOCALAPPDATA%\\Jade (Windows),
+        ~/Library/Application Support/Jade (macOS), ~/.local/share/Jade (Linux)."""
+        return Path(_user_data_dir("Jade", appauthor=False))
 
     @property
     def chats_db(self) -> Path:
