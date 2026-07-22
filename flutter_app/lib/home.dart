@@ -15,6 +15,7 @@ import 'settings.dart';
 import 'sources_panel.dart';
 import 'tabler.dart';
 import 'theme.dart';
+import 'update.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,6 +28,7 @@ class HomeScreenState extends State<HomeScreen> {
   final api = ApiClient();
 
   AppStatus? status;
+  UpdateInfo? update;
   List<Conversation> conversations = [];
   List<Folder> folders = [];
   final Set<String> openFolders = {};
@@ -45,6 +47,13 @@ class HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _refresh();
+    _checkUpdate();
+  }
+
+  /// Vérifie discrètement s'il existe une mise à jour (jamais bloquant).
+  Future<void> _checkUpdate() async {
+    final info = await api.checkUpdate();
+    if (mounted && info.available) setState(() => update = info);
   }
 
   @override
@@ -748,6 +757,10 @@ class _Footer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (state.update?.showButton == true) ...[
+            UpdateButton(api: state.api, info: state.update!),
+            const SizedBox(height: JadeSpace.sm + 2),
+          ],
           Row(
             children: [
               CircleAvatar(

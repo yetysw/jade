@@ -33,6 +33,8 @@ class TablerIcons {
   static const IconData world = IconData(0xeb54, fontFamily: _f);
   static const IconData arrowRight = IconData(0xea1f, fontFamily: _f);
   static const IconData alertCircle = IconData(0xea05, fontFamily: _f);
+  static const IconData alertTriangle = IconData(0xea06, fontFamily: _f);
+  static const IconData circleCheck = IconData(0xea67, fontFamily: _f);
   static const IconData refresh = IconData(0xeb13, fontFamily: _f);
   static const IconData paperclip = IconData(0xeb02, fontFamily: _f);
   static const IconData trash = IconData(0xeb41, fontFamily: _f);

@@ -5,7 +5,7 @@
 
   **Assistant documentaire d'entreprise, « local d'abord »**
 
-  ![Version](https://img.shields.io/badge/version-1.2.0-00357F)
+  ![Version](https://img.shields.io/badge/version-1.3.0-00357F)
   ![Plateforme](https://img.shields.io/badge/Windows-10%2F11-informational)
   ![UI](https://img.shields.io/badge/interface-Flutter%20native-blue)
   ![Licence](https://img.shields.io/badge/licence-Jade%20S%C3%A0rl-lightgrey)
@@ -77,6 +77,9 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
   filtrage des droits NTFS par utilisateur au moment de la recherche.
 - **Confort** : mode incognito, thème clair / sombre / **auto**, multi-utilisateur
   (conversations isolées par session), interface française.
+- **Mises à jour** : détection automatique de la dernière version publiée sur
+  Gitea. Sur poste client, un **bouton** propose de télécharger et installer ;
+  sur serveur RDS, une **tâche planifiée nocturne** l'applique hors session.
 
 ## Prérequis
 
@@ -89,7 +92,7 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 
 ## Installation (poste client)
 
-Utiliser l'installateur `Jade-Setup-1.1.0.exe` (voir *Build* plus bas).
+Utiliser l'installateur `Jade-Setup-1.3.0.exe` (voir *Build* plus bas).
 **Aucun secret n'est embarqué dans l'installateur** : pendant l'installation,
 l'assistant demande les **identifiants d'accès Jade** (adresse du serveur LLM,
 jetons Cloudflare Access, éventuel SearXNG) et le **mot de passe administrateur**.
@@ -134,6 +137,8 @@ La configuration vit dans un fichier **`.env`** :
 | `SETTINGS_PASSWORD` | mot de passe des réglages (admin) |
 | `NTFS_FILTER` | filtrage des droits NTFS par utilisateur |
 | `REINDEX_MINUTES` | réindexation automatique périodique |
+| `UPDATE_MODE` | `manual` (poste : bouton) ou `scheduled` (RDS : tâche nocturne) |
+| `GITEA_API_URL`, `GITEA_REPO`, `GITEA_TOKEN` | source des mises à jour (releases Gitea) |
 
 ## Développement
 
@@ -171,7 +176,31 @@ python -m PyInstaller jade.spec --noconfirm
   embarqué dans l'exe, aucun secret versionné).
 
 > Non fait à ce stade : **signature de code** (SmartScreen affichera « éditeur
-> inconnu »), service Windows d'indexation, auto-update.
+> inconnu » — à prévoir avant de livrer l'auto-update en production), service
+> Windows d'indexation.
+
+## Mises à jour
+
+Les versions sont publiées comme **releases Gitea** (`git.example.com`), avec
+l'installateur en pièce jointe. Au démarrage, l'application interroge la
+dernière release et compare la version (mise en cache 1 h, non bloquant).
+
+- **Poste client** (`UPDATE_MODE=manual`, défaut) : un bouton **« Mise à jour
+  disponible »** s'affiche dans la barre latérale. L'utilisateur clique quand il
+  veut → l'installateur est téléchargé (avec progression) puis lancé ; Inno
+  Setup ferme et relance Jade. Pour un téléchargement/lancement sans invite UAC,
+  installer par utilisateur dans `%LOCALAPPDATA%`.
+- **Serveur RDS** (`UPDATE_MODE=scheduled`) : le bouton est **masqué**. La mise à
+  jour passe par une **tâche planifiée** (`installer/jade-update-task.ps1`),
+  exécutée sous le compte **SYSTEM** à **01:00**, qui applique la nouvelle
+  version **uniquement si aucun utilisateur n'est connecté** (sinon report à la
+  nuit suivante). Installation :
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File installer\jade-update-task.ps1 -Register
+  ```
+
+Dépôt privé : renseigner `GITEA_TOKEN` (jeton de lecture) dans le `.env`.
 
 ## Structure
 
