@@ -47,6 +47,33 @@ log = logging.getLogger(__name__)
 
 LLM_CHECK_TTL = 60  # secondes de cache pour l'etat du LLM central
 
+# Tailles approximatives (Mo) des modèles téléchargés au 1er lancement : sert à
+# afficher une progression au démarrage (barre + mini-journal côté application).
+_MODEL_MB = {
+    "intfloat/multilingual-e5-large": 2100,
+    "jinaai/jina-reranker-v2-base-multilingual": 1100,
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": 450,
+}
+
+
+def _est_mb(name: str) -> int:
+    return _MODEL_MB.get(name, 500)
+
+
+def _dir_size(path) -> int:
+    """Taille totale d'un dossier en octets (pour suivre le téléchargement)."""
+    total = 0
+    try:
+        for root, _dirs, files in os.walk(path):
+            for f in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, f))
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
 
 NO_INFO_ANSWER = (
     "Je ne trouve pas d'information pertinente dans les documents indexés "
@@ -347,6 +374,15 @@ def create_app(settings: Settings) -> FastAPI:
         "bm25": Bm25Index(), "reranker": None, "reranker_tried": False,
         "cancels": {},  # req_id -> threading.Event (arrêt de génération)
         "welcome": {"at": 0.0, "sig": "", "items": []},  # suggestions d'accueil (cache)
+        # progression du démarrage (téléchargement/chargement des modèles) —
+        # exposée par /api/init pour l'écran de démarrage.
+        "init": {
+            "phase": "starting",       # starting|downloading|loading|engine|ready
+            "detail": "Préparation…",
+            "downloaded_mb": 0,
+            "total_mb": 0,
+            "ready": False,
+        },
     }
     index_lock = threading.Lock()
 
@@ -409,13 +445,50 @@ def create_app(settings: Settings) -> FastAPI:
             index_lock.release()
             winmem.trim_working_set()  # rendre au système la RAM des buffers d'indexation
 
+    def _prepare_models() -> None:
+        """Télécharge (1er lancement) puis charge les modèles de recherche, en
+        publiant la progression dans state['init']. Le serveur répond déjà (le
+        chargement est paresseux) : c'est ici seulement que le gros
+        téléchargement a lieu, sans jamais bloquer /api/status."""
+        init = state["init"]
+        cache = settings.model_cache_dir
+        total_mb = _est_mb(embedder.model_name)
+        if settings.rerank_enabled:
+            total_mb += _est_mb(settings.rerank_model)
+        baseline = _dir_size(cache)
+        cached = baseline >= int(total_mb * 1024 * 1024 * 0.6)
+        if cached:
+            init.update(phase="loading", total_mb=0,
+                        detail="Chargement des modèles de recherche…")
+        else:
+            init.update(phase="downloading", total_mb=total_mb,
+                        detail="Téléchargement des modèles de recherche (une seule fois)…")
+
+        stop = threading.Event()
+
+        def _monitor() -> None:
+            while not stop.is_set():
+                done = max(0, _dir_size(cache) - baseline) // (1024 * 1024)
+                init["downloaded_mb"] = int(done)
+                time.sleep(1.0)
+
+        threading.Thread(target=_monitor, daemon=True).start()
+        try:
+            embedder.ensure_loaded()          # embeddings (télécharge si absent)
+            init.update(phase="loading", detail="Chargement du reranker…")
+            _load_reranker()                  # cross-encoder (idem, facultatif)
+        finally:
+            stop.set()
+
     def _background_loop() -> None:
+        init = state["init"]
+        _prepare_models()
+        init.update(phase="engine", detail="Démarrage du moteur…")
         _rebuild_bm25()  # index BM25 initial
-        llm.warmup()  # charge le modele en VRAM des le demarrage
+        llm.warmup()  # charge le modele central en VRAM
         _check_llm(force=True)
         # migration d'embeddings : si le modèle configuré ne correspond plus à
-        # l'index existant, réindexation complète immédiate en tâche de fond
-        # (pendant ce temps, BM25 + reranker continuent de répondre).
+        # l'index existant, réindexation complète immédiate en tâche de fond.
         try:
             marker = settings.data_dir / "embed_model.txt"
             previous = marker.read_text(encoding="utf-8").strip() if marker.exists() else ""
@@ -424,7 +497,7 @@ def create_app(settings: Settings) -> FastAPI:
                 threading.Thread(target=_do_index, daemon=True).start()
         except OSError:
             pass
-        _load_reranker()  # télécharge/charge le cross-encoder sans bloquer les requêtes
+        init.update(phase="ready", detail="Prêt", ready=True)
         winmem.trim_working_set()  # démarrage terminé : libérer la RAM inutilisée
         while True:
             if settings.reindex_minutes > 0:
@@ -587,6 +660,13 @@ def create_app(settings: Settings) -> FastAPI:
             "last_index": state["last_index"],
             "reindex_minutes": settings.reindex_minutes,
         }
+
+    @app.get("/api/init")
+    def init_status():
+        """Progression du démarrage (téléchargement/chargement des modèles) pour
+        l'écran de démarrage. Le serveur répond dès le lancement ; `ready` passe
+        à vrai quand les modèles sont chargés."""
+        return state["init"]
 
     # ------------------------------------------------------------ mises à jour
 

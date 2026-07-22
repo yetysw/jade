@@ -87,6 +87,7 @@ class Settings:
     gitea_api_url: str
     gitea_repo: str  # "owner/repo", ex. "example/jade"
     gitea_token: str  # jeton lecture (dépôt privé) ; vide si public
+    setup_password: str  # mot de passe de l'installateur chiffré (auto-update silencieux)
 
     # Extensions prises en charge par les parseurs (voir ingest/parsers.py)
     extensions: tuple[str, ...] = field(
@@ -197,4 +198,5 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         gitea_api_url=get("GITEA_API_URL", "https://git.example.com").rstrip("/"),
         gitea_repo=get("GITEA_REPO", "example/jade").strip("/ "),
         gitea_token=get("GITEA_TOKEN", ""),
+        setup_password=get("SETUP_PASSWORD", ""),
     )

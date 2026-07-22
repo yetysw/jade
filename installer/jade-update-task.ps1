@@ -41,6 +41,7 @@ param(
     [string]$ApiUrl = 'https://git.example.com',
     [string]$Repo   = 'example/jade',
     [string]$Token  = '',
+    [string]$SetupPassword = '',
     [int]$Hour = 1,
     [int]$Minute = 0
 )
@@ -72,8 +73,8 @@ if ($Register) {
     return
 }
 
-# --- version installée (clé de désinstallation Inno Setup) -------------------
-function Get-InstalledVersion {
+# --- version + emplacement installés (clé de désinstallation Inno Setup) ------
+function Get-JadeInstall {
     $roots = @(
         'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
         'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -83,11 +84,28 @@ function Get-InstalledVersion {
         foreach ($key in Get-ChildItem $root) {
             $p = Get-ItemProperty $key.PSPath
             if ($p.DisplayName -like 'Jade*' -and $p.DisplayVersion) {
-                return [version]($p.DisplayVersion -replace '[^0-9.]', '')
+                return [pscustomobject]@{
+                    Version  = [version]($p.DisplayVersion -replace '[^0-9.]', '')
+                    Location = $p.InstallLocation
+                }
             }
         }
     }
     return $null
+}
+
+# Mot de passe de l'installateur chiffré (lu dans le .env installé) pour que la
+# mise à jour silencieuse puisse déchiffrer l'installateur.
+function Get-SetupPassword {
+    param([string]$InstallLocation)
+    if ($SetupPassword) { return $SetupPassword }
+    if (-not $InstallLocation) { return '' }
+    $envFile = Join-Path $InstallLocation 'backend\.env'
+    if (-not (Test-Path $envFile)) { return '' }
+    foreach ($line in Get-Content $envFile) {
+        if ($line -match '^\s*SETUP_PASSWORD\s*=\s*(.+)$') { return $Matches[1].Trim() }
+    }
+    return ''
 }
 
 # --- présence d'utilisateurs connectés ---------------------------------------
@@ -102,8 +120,9 @@ function Test-UsersLoggedOn {
 }
 
 try {
-    $installed = Get-InstalledVersion
-    if (-not $installed) { Write-Log 'Version installée introuvable — abandon.'; return }
+    $install = Get-JadeInstall
+    if (-not $install) { Write-Log 'Version installée introuvable — abandon.'; return }
+    $installed = $install.Version
 
     $headers = @{}
     if ($Token) { $headers['Authorization'] = "token $Token" }
@@ -124,8 +143,12 @@ try {
     Write-Log ('Téléchargement de {0} …' -f $asset.name)
     Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile $dest -TimeoutSec 600
 
+    $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS')
+    $pw = Get-SetupPassword -InstallLocation $install.Location
+    if ($pw) { $args += "/PASSWORD=$pw" }  # installateur chiffré
+
     Write-Log 'Installation silencieuse…'
-    $proc = Start-Process -FilePath $dest -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS' -Wait -PassThru
+    $proc = Start-Process -FilePath $dest -ArgumentList $args -Wait -PassThru
     Write-Log ('Installateur terminé (code {0}). Mise à jour vers {1} appliquée.' -f $proc.ExitCode, $latest)
     Remove-Item $dest -Force -ErrorAction SilentlyContinue
 } catch {
