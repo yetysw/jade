@@ -7,13 +7,30 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
-## 1.1.0 — 🚧 en cours (branche `dev`)
+## 1.2.0 — 🚧 dev : ⭐ Base multiplateforme (Windows · macOS · Linux)
+
+- ⭐ **Portage du backend** vers des solutions communes aux 3 OS (pas de variante
+  « grandement différente ») :
+  - ouverture fichiers / URL / dossiers portable (`openers.py` : `startfile` /
+    `open` / `xdg-open`) ;
+  - chemins de données via **`platformdirs`** (mêmes emplacements sous Windows) ;
+  - préférences en **JSON** portable (au lieu du registre) ;
+  - `security` (DPAPI/EFS), `winmem` : gardes explicites, dégradation propre
+    hors Windows ; `ntfs` déjà portable (basé sur `open()`).
+  - nom d'utilisateur via `getpass` en repli.
+- **Runners Flutter macOS + Linux** générés ; `backend.dart` cherche l'exécutable
+  backend par plateforme.
+- *Reste à faire pour livrer sur macOS/Linux : builds + installateurs natifs
+  (`.dmg`, `.deb`/AppImage), à réaliser sur ces OS.*
+
+---
+
+## 1.1.0 — 🚧 dev : logo spirale + animation
 
 - ⭐ **Logo** : retour au **logo spirale** de Jade partout (application, icône
   .exe / barre des tâches, installateur, dépôt). La gemme bleue est retirée.
 - **Animation de génération** : le logo **tourne** pendant que Jade réfléchit /
   répond (respecte « réduire les animations »).
-- 🚧 Préparation du **support multiplateforme** (macOS / Linux).
 
 ---
 

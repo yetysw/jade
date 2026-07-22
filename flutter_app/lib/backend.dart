@@ -63,13 +63,17 @@ class BackendManager {
         '(indexation initiale en cours ?).';
   }
 
-  /// Cherche l'exécutable backend installé à côté de l'app Flutter.
+  /// Cherche l'exécutable backend installé à côté de l'app Flutter
+  /// (multiplateforme : « Jade.exe » sous Windows, « Jade » ailleurs).
   String? _findBackendExe() {
     final appDir = File(Platform.resolvedExecutable).parent.path;
+    final exe = Platform.isWindows ? 'Jade.exe' : 'Jade';
+    final s = Platform.pathSeparator;
+    final parent = File(appDir).parent.path;
     for (final candidate in [
-      '$appDir\\backend\\Jade.exe', // installé (dossier backend/)
-      '$appDir\\Jade.exe', // à plat à côté de l'UI
-      '${File(appDir).parent.path}\\Jade\\Jade.exe',
+      '$appDir${s}backend$s$exe', // installé (dossier backend/)
+      '$appDir$s$exe', // à plat à côté de l'UI
+      '$parent${s}Jade$s$exe',
     ]) {
       if (File(candidate).existsSync()) return candidate;
     }

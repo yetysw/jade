@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import re
-import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from .. import ntfs, ocr, prefs, winmem
 from ..chat_store import DEFAULT_TITLE, ChatStore
 from ..config import Settings
+from ..openers import open_path, open_url, reveal_path
 from ..embedding import Embedder
 from ..hybrid import Bm25Index, Reranker
 from ..ingest.indexer import run_index
@@ -155,7 +156,15 @@ def _session_display_name() -> str:
                 return buf.value.strip()
     except Exception:
         pass
-    username = os.environ.get("USERNAME", "Utilisateur")
+    # repli portable (macOS / Linux / Windows sans domaine)
+    import getpass
+
+    try:
+        username = getpass.getuser()
+    except Exception:
+        username = os.environ.get("USERNAME") or os.environ.get("USER") or "Utilisateur"
+    if sys.platform != "win32":
+        return username
     try:
         import ctypes
 
@@ -811,7 +820,7 @@ def create_app(settings: Settings) -> FastAPI:
         if req.content.strip():
             mailto += f"&body={urllib.parse.quote(req.content.strip())}"
         try:
-            os.startfile(mailto)
+            open_url(mailto)
         except OSError as e:
             raise HTTPException(500, f"Impossible d'ouvrir le client mail : {e}")
         return {"ok": True}
@@ -1218,7 +1227,7 @@ def create_app(settings: Settings) -> FastAPI:
             log.exception("Creation de fichier echouee")
             raise HTTPException(500, f"Création impossible : {e}")
         try:
-            os.startfile(str(path))
+            open_path(str(path))
         except OSError:
             pass
         return {"path": str(path)}
@@ -1266,7 +1275,7 @@ def create_app(settings: Settings) -> FastAPI:
         out_path = out_dir / f"{safe} {_dt.now().strftime('%Y-%m-%d %H%M%S')}.docx"
         doc.save(str(out_path))
         try:
-            os.startfile(str(out_path))  # ouvre dans Word
+            open_path(str(out_path))  # ouvre dans l'appli par défaut
         except OSError:
             pass  # pas de Word installe : le fichier est cree quand meme
         return {"path": str(out_path)}
@@ -1283,7 +1292,7 @@ def create_app(settings: Settings) -> FastAPI:
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             raise HTTPException(400, "URL invalide")
         try:
-            os.startfile(req.url)  # navigateur par défaut Windows
+            open_url(req.url)  # navigateur par défaut du système
         except OSError as e:
             raise HTTPException(500, f"Ouverture impossible : {e}")
         return {"ok": True}
@@ -1322,9 +1331,9 @@ def create_app(settings: Settings) -> FastAPI:
             raise HTTPException(403, "Chemin hors des dossiers autorisés")
         try:
             if req.reveal:
-                subprocess.Popen(["explorer", "/select,", str(resolved)])
+                reveal_path(str(resolved))
             else:
-                os.startfile(str(resolved))  # application par defaut Windows
+                open_path(str(resolved))  # application par défaut du système
         except OSError as e:
             raise HTTPException(500, f"Ouverture impossible : {e}")
         return {"ok": True}

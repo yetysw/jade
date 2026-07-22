@@ -4,11 +4,12 @@ L'index vectoriel est partagé entre tous les utilisateurs du serveur, mais un
 utilisateur ne doit jamais recevoir d'extrait d'un fichier qu'il n'a pas le
 droit de lire sur le disque (document RH, dossier de direction…).
 
-L'application de bureau s'exécute dans la session Windows de l'utilisateur :
-tenter d'ouvrir le fichier en lecture reflète fidèlement les ACL NTFS effectives
-(héritage, refus explicite, appartenance aux groupes) — bien plus fiable que
-`os.access`, qui ignore les ACL sous Windows. Le résultat est mis en cache
-(par chemin, TTL court) pour ne pas rouvrir chaque fichier à chaque question.
+Le backend s'exécute dans la session de l'utilisateur : tenter d'ouvrir le
+fichier en lecture reflète fidèlement les droits effectifs — ACL NTFS sous
+Windows (héritage, refus explicite, groupes), permissions POSIX sous
+macOS/Linux — bien plus fiable que `os.access`. Portable : on s'appuie sur
+`open()` standard, pas sur une API système. Résultat mis en cache (par chemin,
+TTL court) pour ne pas rouvrir chaque fichier à chaque question.
 """
 
 from __future__ import annotations

@@ -1,37 +1,39 @@
-"""Préférences utilisateur persistées dans le registre Windows (HKCU).
+"""Préférences utilisateur (drapeaux d'interface), portables Windows/macOS/Linux.
 
-Utilisé pour retenir l'état du mode incognito d'une session à l'autre. Local à
-l'utilisateur Windows courant (HKEY_CURRENT_USER) : aucune donnée de contenu,
-seulement des drapeaux d'interface.
+Persistées dans un petit fichier JSON du dossier de configuration de
+l'utilisateur (via platformdirs). Local à l'utilisateur courant : aucune donnée
+de contenu, seulement des drapeaux (ex. état du mode incognito).
 """
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
+
+from platformdirs import user_config_dir
 
 log = logging.getLogger(__name__)
 
-_KEY = r"Software\Jade\Jade"
+_FILE = Path(user_config_dir("Jade", appauthor=False)) / "prefs.json"
+
+
+def _load() -> dict:
+    try:
+        return json.loads(_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 
 
 def get_bool(name: str, default: bool = False) -> bool:
-    try:
-        import winreg
-
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _KEY) as k:
-            val, _ = winreg.QueryValueEx(k, name)
-            return bool(val)
-    except FileNotFoundError:
-        return default
-    except (OSError, ImportError):
-        return default
+    return bool(_load().get(name, default))
 
 
 def set_bool(name: str, value: bool) -> None:
     try:
-        import winreg
-
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _KEY) as k:
-            winreg.SetValueEx(k, name, 0, winreg.REG_DWORD, 1 if value else 0)
-    except (OSError, ImportError) as e:
-        log.warning("Écriture de la préférence « %s » dans le registre échouée : %s", name, e)
+        data = _load()
+        data[name] = bool(value)
+        _FILE.parent.mkdir(parents=True, exist_ok=True)
+        _FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        log.warning("Écriture de la préférence « %s » échouée : %s", name, e)
