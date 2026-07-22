@@ -26,7 +26,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from .. import ntfs, ocr, prefs, updater, winmem
+from .. import models_fetch, ntfs, ocr, prefs, updater, winmem
 from ..chat_store import DEFAULT_TITLE, ChatStore
 from ..config import Settings
 from ..openers import open_path, open_url, reveal_path
@@ -445,40 +445,83 @@ def create_app(settings: Settings) -> FastAPI:
             index_lock.release()
             winmem.trim_working_set()  # rendre au système la RAM des buffers d'indexation
 
+    def _load_with_retry(fn, label: str, retries: int = 5) -> None:
+        """Charge un modèle en réessayant : un téléchargement HF bridé qui a
+        expiré (HF_HUB_DOWNLOAD_TIMEOUT) est repris (fichiers partiels conservés)."""
+        for attempt in range(1, retries + 1):
+            try:
+                fn()
+                return
+            except Exception as e:
+                log.warning("Chargement %s échoué (tentative %d/%d) : %s",
+                            label, attempt, retries, e)
+                if attempt == retries:
+                    raise
+                state["init"].update(
+                    detail=f"Reprise du téléchargement… (tentative {attempt + 1})")
+                time.sleep(min(20, 2 ** attempt))
+
     def _prepare_models() -> None:
-        """Télécharge (1er lancement) puis charge les modèles de recherche, en
-        publiant la progression dans state['init']. Le serveur répond déjà (le
-        chargement est paresseux) : c'est ici seulement que le gros
-        téléchargement a lieu, sans jamais bloquer /api/status."""
+        """Rend les modèles de recherche disponibles puis les charge, en publiant
+        la progression dans state['init']. Le serveur répond déjà (chargement
+        paresseux) : c'est ici seulement que le gros téléchargement a lieu, sans
+        jamais bloquer /api/status. Source : archive Jade (Gitea) si configurée,
+        sinon HuggingFace — les deux avec reprise."""
         init = state["init"]
         cache = settings.model_cache_dir
         total_mb = _est_mb(embedder.model_name)
         if settings.rerank_enabled:
             total_mb += _est_mb(settings.rerank_model)
-        baseline = _dir_size(cache)
-        cached = baseline >= int(total_mb * 1024 * 1024 * 0.6)
+
+        cached = models_fetch.models_present(cache)
+
+        # 1) source fiable : archive .tar hébergée par Jade (Gitea), avec reprise
+        if not cached and settings.models_url:
+            def _p(phase: str, done: int, total: int) -> None:
+                if phase == "downloading":
+                    init.update(
+                        phase="downloading",
+                        downloaded_mb=done >> 20,
+                        total_mb=(total >> 20) if total else total_mb,
+                        detail="Téléchargement des modèles de recherche (une seule fois)…",
+                    )
+                else:
+                    init.update(phase="loading", total_mb=0,
+                                detail="Décompression des modèles…")
+            try:
+                models_fetch.fetch_and_extract(
+                    settings.models_url, cache, settings.gitea_token, _p)
+                cached = True
+            except Exception as e:
+                log.warning("Modèles indisponibles depuis %s (%s) ; repli HuggingFace",
+                            settings.models_url, e)
+
+        # 2) chargement — repli HuggingFace si l'archive n'a pas fourni les modèles
+        stop: threading.Event | None = None
         if cached:
             init.update(phase="loading", total_mb=0,
                         detail="Chargement des modèles de recherche…")
         else:
             init.update(phase="downloading", total_mb=total_mb,
-                        detail="Téléchargement des modèles de recherche (une seule fois)…")
+                        detail="Téléchargement des modèles de recherche (HuggingFace)…")
+            baseline = _dir_size(cache)
+            stop = threading.Event()
 
-        stop = threading.Event()
+            def _monitor() -> None:
+                while not stop.is_set():
+                    done = max(0, _dir_size(cache) - baseline) // (1024 * 1024)
+                    init["downloaded_mb"] = int(done)
+                    time.sleep(1.0)
 
-        def _monitor() -> None:
-            while not stop.is_set():
-                done = max(0, _dir_size(cache) - baseline) // (1024 * 1024)
-                init["downloaded_mb"] = int(done)
-                time.sleep(1.0)
+            threading.Thread(target=_monitor, daemon=True).start()
 
-        threading.Thread(target=_monitor, daemon=True).start()
         try:
-            embedder.ensure_loaded()          # embeddings (télécharge si absent)
-            init.update(phase="loading", detail="Chargement du reranker…")
-            _load_reranker()                  # cross-encoder (idem, facultatif)
+            _load_with_retry(embedder.ensure_loaded, "embeddings")  # fatal si absent
+            init.update(detail="Chargement du reranker…")
+            _load_reranker()                  # cross-encoder (dégrade proprement)
         finally:
-            stop.set()
+            if stop is not None:
+                stop.set()
 
     def _background_loop() -> None:
         init = state["init"]

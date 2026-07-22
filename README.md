@@ -5,7 +5,7 @@
 
   **Assistant documentaire d'entreprise, « local d'abord »**
 
-  ![Version](https://img.shields.io/badge/version-1.4.0-00357F)
+  ![Version](https://img.shields.io/badge/version-1.4.1-00357F)
   ![Plateforme](https://img.shields.io/badge/Windows-10%2F11-informational)
   ![UI](https://img.shields.io/badge/interface-Flutter%20native-blue)
   ![Licence](https://img.shields.io/badge/licence-Jade%20S%C3%A0rl-lightgrey)
@@ -92,7 +92,7 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 
 ## Installation (poste client)
 
-Utiliser l'installateur `Jade-Setup-1.4.0.exe` (voir *Build* plus bas).
+Utiliser l'installateur `Jade-Setup-1.4.1.exe` (voir *Build* plus bas).
 **Aucun secret n'est embarqué dans l'installateur** : pendant l'installation,
 l'assistant demande les **identifiants d'accès Jade** (adresse du serveur LLM,
 jetons Cloudflare Access, éventuel SearXNG) et le **mot de passe administrateur**.
@@ -103,11 +103,21 @@ n'est distribué avec l'exe.
 - Pose l'index partagé, les journaux et le cache de modèles dans
   `C:\ProgramData\Jade` (inscriptible par tous les utilisateurs du serveur).
 - Les conversations de chaque utilisateur restent dans `%LOCALAPPDATA%\Jade`.
-- Les **modèles de recherche locaux** (embeddings + reranker) sont **téléchargés
-  automatiquement au premier lancement** dans `C:\ProgramData\Jade\models`
-  (connexion Internet requise la première fois). L'installateur reste léger
-  (~90 Mo). *Note : l'OCR des documents scannés/images n'est pas inclus dans
-  cette version légère.*
+- Les **modèles de recherche locaux** (embeddings + reranker, ~3,2 Go) sont
+  **téléchargés automatiquement au premier lancement** dans
+  `C:\ProgramData\Jade\models` (une seule fois), avec **barre de progression**.
+  Source par défaut : une **archive `.tar` hébergée par Jade** (`MODELS_URL`,
+  Gitea) — fiable, avec **reprise** sur coupure ; repli automatique sur
+  HuggingFace. L'installateur reste léger (~90 Mo). *Note : l'OCR des documents
+  scannés/images n'est pas inclus dans cette version légère.*
+
+  > **Héberger l'archive des modèles** (recommandé — HuggingFace bride les
+  > téléchargements non authentifiés) : créer l'archive avec
+  > `tar -chf jade-models.tar --exclude=blobs --exclude=.locks -C <cache> .`
+  > (où `<cache>` = un `C:\ProgramData\Jade\models` déjà peuplé), puis la
+  > déposer sur Gitea à l'URL de `MODELS_URL`. Le fichier fait ~3,2 Go : le
+  > déposer **directement sur le serveur** (la limite Cloudflare de 100 Mo ne
+  > s'applique qu'aux envois, pas aux téléchargements).
 
 Au premier démarrage, l'index est vide : ouvrir les **Réglages** (roue crantée →
 mot de passe admin) et ajouter les dossiers / lecteurs réseau à indexer.

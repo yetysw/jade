@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.4.0"
+#define AppVersion "1.4.1"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -212,6 +212,7 @@ begin
     'GITEA_API_URL=https://git.example.com' + NL +
     'GITEA_REPO=example/jade' + NL +
     'GITEA_TOKEN=' + NL +
+    'MODELS_URL=https://git.example.com/example/jade/releases/download/models/jade-models.tar' + NL +
 #ifdef SetupPassword
     'SETUP_PASSWORD={#SetupPassword}' + NL +
 #endif
