@@ -106,7 +106,8 @@ class _BootState extends State<_Boot> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const JadeMark(size: 72),
+              // le logo tourne pendant le démarrage (indicateur de chargement)
+              JadeMark(size: 76, animate: ok),
               const SizedBox(height: JadeSpace.xxl),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -121,20 +122,8 @@ class _BootState extends State<_Boot> {
                   ),
                 ],
               ),
-              const SizedBox(height: JadeSpace.md),
-              if (ok)
-                SizedBox(
-                  width: 132,
-                  child: ClipRRect(
-                    borderRadius: JadeRadius.all(JadeRadius.pill),
-                    child: LinearProgressIndicator(
-                      minHeight: 3,
-                      backgroundColor: jade.tile,
-                      color: jade.primary,
-                    ),
-                  ),
-                )
-              else ...[
+              if (!ok) ...[
+                const SizedBox(height: JadeSpace.md),
                 Text(
                   _error!,
                   textAlign: TextAlign.center,

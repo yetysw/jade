@@ -6,8 +6,6 @@
 /// Guidelines) et Material 3. Voir `.claude/skills/jade-ui-design`.
 library;
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
@@ -173,137 +171,62 @@ class _FocusRingState extends State<FocusRing> {
   }
 }
 
-// ─────────────────────────────────────────────────────── marque (gemme Jade)
-/// Marque du produit : une gemme jade taillée (Jade = pierre verte), posée sur
-/// une tuile arrondie sombre pour faire ressortir les facettes. Élément
-/// signature unique — le reste de l'UI reste sobre.
+// ──────────────────────────────────────────────────────────── marque (logo)
+/// Marque du produit : le logo spirale de Jade.
 class JadeMark extends StatelessWidget {
   final double size;
-  const JadeMark({super.key, this.size = 38});
-
-  // Gemme « jade » taillée mais en bleu Jade (marque du produit).
-  static const _gemTop = Color(0xFF8FBEFF);
-  static const _gemMid = Color(0xFF2E6FD6);
-  static const _gemDeep = Color(0xFF002B67);
-  static const _tile = Color(0xFF07234A);
+  final bool animate;
+  const JadeMark({super.key, this.size = 38, this.animate = false});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final logo = Image.asset(
+      'assets/jade-logo.png',
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [_tile, Color(0xFF04152E)],
-        ),
-        borderRadius: JadeRadius.all(size * 0.3),
-        boxShadow: [
-          BoxShadow(
-            color: _gemMid.withValues(alpha: context.isDark ? 0.36 : 0.30),
-            blurRadius: size * 0.32,
-            offset: Offset(0, size * 0.14),
-          ),
-        ],
-      ),
-      child: Center(
-        child: CustomPaint(
-          size: Size(size * 0.52, size * 0.6),
-          painter: _GemPainter(top: _gemTop, mid: _gemMid, deep: _gemDeep),
-        ),
-      ),
+      filterQuality: FilterQuality.medium,
     );
+    if (!animate) return logo;
+    return _SpinningLogo(size: size, child: logo);
   }
 }
 
-/// Gemme taillée « brillant » vue de profil : table plate, couronne facettée,
-/// pavillon convergeant en pointe. Dégradé vertical + facettes ombrées + éclat.
-class _GemPainter extends CustomPainter {
-  final Color top;
-  final Color mid;
-  final Color deep;
-  _GemPainter({required this.top, required this.mid, required this.deep});
+/// Rotation continue du logo — indicateur « génération en cours ».
+class _SpinningLogo extends StatefulWidget {
+  final double size;
+  final Widget child;
+  const _SpinningLogo({required this.size, required this.child});
 
   @override
-  void paint(Canvas canvas, Size s) {
-    final w = s.width, h = s.height;
-    final crown = h * 0.34; // ligne du rondiste (bas de la couronne)
-    final gx = w * 0.14; // retrait des épaules
-    final cx = w * 0.5;
+  State<_SpinningLogo> createState() => _SpinningLogoState();
+}
 
-    // silhouette complète, remplie d'un dégradé jade vertical
-    final outline = Path()
-      ..moveTo(w * 0.28, 0)
-      ..lineTo(w * 0.72, 0)
-      ..lineTo(w - gx, crown)
-      ..lineTo(cx, h)
-      ..lineTo(gx, crown)
-      ..close();
-    canvas.drawPath(
-      outline,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [top, mid, deep],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(Rect.fromLTWH(0, 0, w, h)),
-    );
+class _SpinningLogoState extends State<_SpinningLogo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
 
-    // facettes ombrées (côté droit) — donne du relief à la taille
-    final shade = Paint()..color = Colors.black.withValues(alpha: 0.16);
-    canvas.drawPath(
-      Path()
-        ..moveTo(cx, crown)
-        ..lineTo(w - gx, crown)
-        ..lineTo(cx, h)
-        ..close(),
-      shade,
-    );
-    canvas.drawPath(
-      Path()
-        ..moveTo(w * 0.72, 0)
-        ..lineTo(w - gx, crown)
-        ..lineTo(cx, crown)
-        ..close(),
-      shade,
-    );
-
-    // arête de table + facettes claires (côté gauche) — lumière
-    final light = Paint()..color = Colors.white.withValues(alpha: 0.14);
-    canvas.drawPath(
-      Path()
-        ..moveTo(w * 0.28, 0)
-        ..lineTo(cx, crown)
-        ..lineTo(gx, crown)
-        ..close(),
-      light,
-    );
-
-    // rondiste (fine ligne claire au niveau de la ceinture)
-    canvas.drawLine(
-      Offset(gx, crown),
-      Offset(w - gx, crown),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.22)
-        ..strokeWidth = math.max(0.8, w * 0.012),
-    );
-
-    // éclat spéculaire sur la table
-    canvas.drawPath(
-      Path()
-        ..moveTo(w * 0.34, h * 0.06)
-        ..lineTo(w * 0.46, h * 0.06)
-        ..lineTo(w * 0.40, crown * 0.86)
-        ..close(),
-      Paint()..color = Colors.white.withValues(alpha: 0.5),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1400))
+      ..repeat();
   }
 
   @override
-  bool shouldRepaint(covariant _GemPainter old) =>
-      old.top != top || old.mid != mid || old.deep != deep;
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // respecte « réduire les animations » : logo fixe si désactivé
+    if (context.motion(const Duration(milliseconds: 1)) == Duration.zero) {
+      return widget.child;
+    }
+    return RotationTransition(turns: _c, child: widget.child);
+  }
 }
 
 // ───────────────────────────────────────────────── libellé de section (eyebrow)

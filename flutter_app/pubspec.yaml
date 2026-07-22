@@ -3,7 +3,7 @@ description: "Jade - assistant documentaire interne Jade (interface native Flutt
 publish_to: 'none'
 
 # v1.0.0 — premiere version stable (interface native Flutter + backend local)
-version: 1.0.0+1
+version: 1.1.0+1
 
 environment:
   sdk: ^3.12.2
@@ -26,6 +26,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/jade-logo.png
   fonts:
     # Geomini (Google Fonts) — police variable, axe de poids wght
     - family: Geomini

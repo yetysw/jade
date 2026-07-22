@@ -19,12 +19,12 @@ param(
   [string]$GiteaUrl = "https://git.example.com",
   [string]$Owner    = "Jade",
   [string]$Repo     = "jade",
-  [string]$Tag      = "v1.0.0"
+  [string]$Tag      = "v1.1.0"
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$exe  = Join-Path $root "dist\installer\Jade-Setup-1.0.0.exe"
+$exe  = Join-Path $root "dist\installer\Jade-Setup-1.1.0.exe"
 if (-not (Test-Path $exe)) { throw "Fichier manquant : $exe" }
 
 $api = "$GiteaUrl/api/v1/repos/$Owner/$Repo"
@@ -56,8 +56,8 @@ function Publish-Asset($path, $name) {
     -H "Authorization: token $Token" -F "attachment=@$path" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "Echec de l'upload de $name" }
 }
-Publish-Asset $exe "Jade-Setup-1.0.0.exe"
+Publish-Asset $exe "Jade-Setup-1.1.0.exe"
 
 Write-Host ""
 Write-Host "Termine. Release : $GiteaUrl/$Owner/$Repo/releases/tag/$Tag" -ForegroundColor Green
-Write-Host "Installateur : $GiteaUrl/$Owner/$Repo/releases/download/$Tag/Jade-Setup-1.0.0.exe"
+Write-Host "Installateur : $GiteaUrl/$Owner/$Repo/releases/download/$Tag/Jade-Setup-1.1.0.exe"

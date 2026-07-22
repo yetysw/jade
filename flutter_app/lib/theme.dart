@@ -94,12 +94,6 @@ class JadeColors extends ThemeExtension<JadeColors> {
     ring: Color(0x886AA5FF),
   );
 
-  /// Teinte jade plus profonde (dégradés de la gemme, accents appuyés).
-  Color get jadeDeep =>
-      bg.computeLuminance() > 0.5 ? const Color(0xFF064A36) : const Color(0xFF1E9C78);
-  Color get jadeLight =>
-      bg.computeLuminance() > 0.5 ? const Color(0xFF39B98E) : const Color(0xFF7FE6C2);
-
   @override
   JadeColors copyWith() => this;
 
