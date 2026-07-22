@@ -19,23 +19,26 @@ param(
   [string]$GiteaUrl = "https://git.example.com",
   [string]$Owner    = "Jade",
   [string]$Repo     = "jade",
-  [string]$Tag      = "v1.1.0"
+  [string]$Tag      = "v1.3.0"
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$exe  = Join-Path $root "dist\installer\Jade-Setup-1.1.0.exe"
+$ver  = $Tag.TrimStart('v')
+$exeName = "Jade-Setup-$ver.exe"
+$exe  = Join-Path $root "dist\installer\$exeName"
 if (-not (Test-Path $exe)) { throw "Fichier manquant : $exe" }
 
 $api = "$GiteaUrl/api/v1/repos/$Owner/$Repo"
 $hdr = @{ Authorization = "token $Token" }
 $notes = @"
-Jade $Tag - premiere version stable.
+Jade $Tag
 
 Installation :
-1. Telecharger et lancer Jade-Setup-$($Tag.TrimStart('v')).exe
+1. Telecharger et lancer $exeName
 2. Renseigner les identifiants Jade demandes par l'assistant
 Les modeles de recherche locaux sont telecharges automatiquement au premier lancement (connexion Internet requise).
+Mises a jour ensuite automatiques (bouton dans l'app / tache planifiee sur RDS).
 "@
 
 # 1) creer la release (ou la recuperer si elle existe deja)
@@ -56,8 +59,8 @@ function Publish-Asset($path, $name) {
     -H "Authorization: token $Token" -F "attachment=@$path" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "Echec de l'upload de $name" }
 }
-Publish-Asset $exe "Jade-Setup-1.1.0.exe"
+Publish-Asset $exe $exeName
 
 Write-Host ""
 Write-Host "Termine. Release : $GiteaUrl/$Owner/$Repo/releases/tag/$Tag" -ForegroundColor Green
-Write-Host "Installateur : $GiteaUrl/$Owner/$Repo/releases/download/$Tag/Jade-Setup-1.1.0.exe"
+Write-Host "Installateur : $GiteaUrl/$Owner/$Repo/releases/download/$Tag/$exeName"
