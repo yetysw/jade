@@ -7,7 +7,17 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
-## 1.3.0 — 🚧 dev : ⭐ Mises à jour automatiques (releases Gitea)
+## 1.3.1 — Correctif : lancement (`.env` non-UTF-8)
+
+- **Crash au démarrage corrigé** : l'assistant d'installation écrit le `.env` en
+  ANSI (cp1252) ; un commentaire contenant des guillemets `« »` faisait échouer
+  la lecture UTF-8 (`UnicodeDecodeError`). Le commentaire généré est repassé en
+  ASCII **et** le chargement du `.env` tolère désormais un fichier cp1252 (repli
+  d'encodage) — un `.env` édité à la main avec des accents ne plante plus.
+
+---
+
+## 1.3.0 — ⭐ Mises à jour automatiques (releases Gitea)
 
 - ⭐ **Détection de mise à jour** côté backend : interroge la dernière *release*
   du dépôt Gitea (`GITEA_API_URL` / `GITEA_REPO`, jeton facultatif) et compare

@@ -127,7 +127,14 @@ class Settings:
 
 
 def load_settings(env_file: str | Path | None = None) -> Settings:
-    load_dotenv(env_file or PROJECT_ROOT / ".env")
+    # Le .env peut avoir été écrit en ANSI/cp1252 (assistant Inno) ou contenir
+    # des accents saisis à la main : on tente l'UTF-8 puis on retombe sur cp1252
+    # (qui décode n'importe quel octet) au lieu de planter au démarrage.
+    env_path = env_file or PROJECT_ROOT / ".env"
+    try:
+        load_dotenv(env_path, encoding="utf-8")
+    except UnicodeDecodeError:
+        load_dotenv(env_path, encoding="cp1252")
     get = os.environ.get
     return Settings(
         docs_dir=_path(get("DOCS_DIR", _DEF_DOCS)),
