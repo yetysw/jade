@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.2.0"
+#define AppVersion "1.3.0"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -174,6 +174,12 @@ begin
     'RERANK_ENABLED=1' + NL +
     'CPU_THREADS=2' + NL +
     'NTFS_FILTER=1' + NL +
+    'UPDATE_ENABLED=1' + NL +
+    '# UPDATE_MODE : « manual » (poste client, bouton) ou « scheduled » (RDS, tache nocturne)' + NL +
+    'UPDATE_MODE=manual' + NL +
+    'GITEA_API_URL=https://git.example.com' + NL +
+    'GITEA_REPO=example/jade' + NL +
+    'GITEA_TOKEN=' + NL +
     'WEB_FALLBACK=1' + NL +
     'SEARXNG_URL=' + Trim(WebPage.Values[0]) + NL +
     'SEARXNG_CF_ACCESS_CLIENT_ID=' + Trim(WebPage.Values[1]) + NL +

@@ -81,6 +81,12 @@ class Settings:
     settings_password: str
     ntfs_filter: bool
     cpu_threads: int
+    # Mises à jour (releases Gitea) — voir updater.py
+    update_enabled: bool
+    update_mode: str  # "manual" (poste client, bouton) | "scheduled" (RDS, tâche)
+    gitea_api_url: str
+    gitea_repo: str  # "owner/repo", ex. "example/jade"
+    gitea_token: str  # jeton lecture (dépôt privé) ; vide si public
 
     # Extensions prises en charge par les parseurs (voir ingest/parsers.py)
     extensions: tuple[str, ...] = field(
@@ -177,4 +183,11 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         # threads ONNX (embeddings/reranker) : borné pour ne pas monopoliser le
         # CPU d'un serveur RDS partagé
         cpu_threads=int(get("CPU_THREADS", "2")),
+        update_enabled=get("UPDATE_ENABLED", "1") not in ("0", "false", ""),
+        # "manual" par défaut (poste client) ; "scheduled" sur serveur RDS où la
+        # mise à jour est appliquée par une tâche planifiée (le bouton est masqué).
+        update_mode=get("UPDATE_MODE", "manual").strip().lower(),
+        gitea_api_url=get("GITEA_API_URL", "https://git.example.com").rstrip("/"),
+        gitea_repo=get("GITEA_REPO", "example/jade").strip("/ "),
+        gitea_token=get("GITEA_TOKEN", ""),
     )

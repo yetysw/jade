@@ -45,6 +45,30 @@ class ApiClient {
   Future<AppStatus> status() async =>
       AppStatus.fromJson(await _json('GET', '/api/status'));
 
+  // ------------------------------------------------------- mises à jour
+
+  /// État de mise à jour (release Gitea la plus récente). Ne lève jamais :
+  /// en cas de souci réseau, renvoie « pas de mise à jour ».
+  Future<UpdateInfo> checkUpdate({bool force = false}) async {
+    try {
+      final j = await _json('GET', '/api/update${force ? '?force=true' : ''}');
+      return UpdateInfo.fromJson(j);
+    } catch (_) {
+      return const UpdateInfo(
+          current: '', latest: '', available: false, mode: 'off', notes: '',
+          assetSize: 0);
+    }
+  }
+
+  Future<DownloadProgress> startDownload() async =>
+      DownloadProgress.fromJson(await _json('POST', '/api/update/download'));
+
+  Future<DownloadProgress> downloadProgress() async =>
+      DownloadProgress.fromJson(await _json('GET', '/api/update/progress'));
+
+  /// Lance l'installateur téléchargé. L'app doit se fermer juste après.
+  Future<void> applyUpdate() => _json('POST', '/api/update/apply');
+
   // ----------------------------------------------------- conversations
 
   Future<List<Conversation>> listConversations() async {

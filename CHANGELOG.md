@@ -7,6 +7,25 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.3.0 — 🚧 dev : ⭐ Mises à jour automatiques (releases Gitea)
+
+- ⭐ **Détection de mise à jour** côté backend : interroge la dernière *release*
+  du dépôt Gitea (`GITEA_API_URL` / `GITEA_REPO`, jeton facultatif) et compare
+  en *semver*. Résultat mis en cache 1 h, non bloquant, dégrade proprement hors
+  ligne.
+- **Poste client** (`UPDATE_MODE=manual`) : un bouton **« Mise à jour
+  disponible »** apparaît dans la barre latérale → dialogue qui **télécharge**
+  l'installateur (progression) puis le **lance** ; Inno Setup ferme et relance
+  Jade.
+- **Serveur RDS** (`UPDATE_MODE=scheduled`) : le bouton est masqué ; une **tâche
+  planifiée nocturne** (`installer/jade-update-task.ps1`, compte SYSTEM, 01:00)
+  applique la mise à jour **hors session** (seulement si aucun utilisateur n'est
+  connecté).
+- Endpoints : `GET /api/update`, `POST /api/update/download`,
+  `GET /api/update/progress`, `POST /api/update/apply`.
+
+---
+
 ## 1.2.0 — 🚧 dev : ⭐ Base multiplateforme (Windows · macOS · Linux)
 
 - ⭐ **Portage du backend** vers des solutions communes aux 3 OS (pas de variante

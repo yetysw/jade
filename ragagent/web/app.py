@@ -26,7 +26,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from .. import ntfs, ocr, prefs, winmem
+from .. import ntfs, ocr, prefs, updater, winmem
 from ..chat_store import DEFAULT_TITLE, ChatStore
 from ..config import Settings
 from ..openers import open_path, open_url, reveal_path
@@ -587,6 +587,39 @@ def create_app(settings: Settings) -> FastAPI:
             "last_index": state["last_index"],
             "reindex_minutes": settings.reindex_minutes,
         }
+
+    # ------------------------------------------------------------ mises à jour
+
+    @app.get("/api/update")
+    def update_check(force: bool = False):
+        """État de mise à jour (release Gitea la plus récente). Non bloquant."""
+        if not settings.update_enabled:
+            from .. import __version__
+
+            return {"current": __version__, "available": False, "mode": "off"}
+        return updater.check(settings, force=force)
+
+    @app.post("/api/update/download")
+    def update_download():
+        """Lance le téléchargement de l'installateur en tâche de fond."""
+        if not settings.update_enabled:
+            raise HTTPException(400, "Mises à jour désactivées.")
+        return updater.start_download(settings)
+
+    @app.get("/api/update/progress")
+    def update_progress():
+        """Progression du téléchargement (idle | downloading | ready | error)."""
+        return updater.download_state()
+
+    @app.post("/api/update/apply")
+    def update_apply():
+        """Lance l'installateur téléchargé (l'app se ferme juste après)."""
+        if not settings.update_enabled:
+            raise HTTPException(400, "Mises à jour désactivées.")
+        res = updater.apply(settings)
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error") or "Installation impossible.")
+        return res
 
     # ------------------------------------------------------------ suggestions
 

@@ -178,6 +178,62 @@ class Message {
       );
 }
 
+/// État de mise à jour (miroir de /api/update).
+class UpdateInfo {
+  final String current;
+  final String latest;
+  final bool available;
+  final String mode; // manual | scheduled | off
+  final String notes;
+  final int assetSize;
+
+  const UpdateInfo({
+    required this.current,
+    required this.latest,
+    required this.available,
+    required this.mode,
+    required this.notes,
+    required this.assetSize,
+  });
+
+  /// Un bouton n'est proposé qu'en mode « manual » (poste client) ; en
+  /// « scheduled » (RDS) la mise à jour est appliquée par une tâche planifiée.
+  bool get showButton => available && mode == 'manual';
+
+  factory UpdateInfo.fromJson(Map<String, dynamic> j) => UpdateInfo(
+        current: j['current'] ?? '',
+        latest: j['latest'] ?? j['current'] ?? '',
+        available: j['available'] == true,
+        mode: j['mode'] ?? 'manual',
+        notes: j['notes'] ?? '',
+        assetSize: j['asset_size'] ?? 0,
+      );
+}
+
+/// Progression du téléchargement d'une mise à jour (miroir de /api/update/progress).
+class DownloadProgress {
+  final String state; // idle | downloading | ready | error
+  final int done;
+  final int total;
+  final String error;
+
+  const DownloadProgress({
+    required this.state,
+    required this.done,
+    required this.total,
+    required this.error,
+  });
+
+  double? get fraction => total > 0 ? (done / total).clamp(0.0, 1.0) : null;
+
+  factory DownloadProgress.fromJson(Map<String, dynamic> j) => DownloadProgress(
+        state: j['state'] ?? 'idle',
+        done: j['done'] ?? 0,
+        total: j['total'] ?? 0,
+        error: j['error'] ?? '',
+      );
+}
+
 /// Événements du flux SSE de /ask.
 sealed class AskEvent {}
 
