@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.3.1"
+#define AppVersion "1.4.0"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -49,6 +49,15 @@ OutputBaseFilename=Jade-Setup-TEST
 PrivilegesRequired=admin
 #endif
 WizardStyle=modern
+; Protection de l'installateur : si le mot de passe est fourni au build
+;   ISCC /DSetupPassword=xxxxx installer\jade.iss
+; le contenu est CHIFFRE et l'installation exige le mot de passe (protege si
+; l'exe fuite). Le mot de passe n'est JAMAIS versionne (passe en ligne de
+; commande, jamais ecrit dans ce script).
+#ifdef SetupPassword
+Password={#SetupPassword}
+Encryption=yes
+#endif
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
@@ -99,6 +108,25 @@ var
   LlmPage: TInputQueryWizardPage;
   WebPage: TInputQueryWizardPage;
 
+function EnvFileExists: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{app}\backend\.env'));
+end;
+
+{ Mise a jour (un .env existe deja) ou installation silencieuse (auto-update) :
+  on ne redemande pas les identifiants et on CONSERVE la configuration en place. }
+function KeepExistingConfig: Boolean;
+begin
+  Result := WizardSilent or EnvFileExists;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+  if (PageID = LlmPage.ID) or (PageID = WebPage.ID) then
+    Result := KeepExistingConfig;
+end;
+
 procedure InitializeWizard;
 begin
   LlmPage := CreateInputQueryPage(wpSelectDir,
@@ -125,6 +153,7 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
+  if KeepExistingConfig then Exit;  // maj/silencieux : pas de saisie a valider
   if CurPageID = LlmPage.ID then
   begin
     if Trim(LlmPage.Values[0]) = '' then
@@ -148,6 +177,9 @@ var
   S: String;
   NL: String;
 begin
+  { Mise a jour ou install silencieuse : conserver le .env existant (identifiants
+    saisis a la 1re installation) — ne jamais l'ecraser ni ecrire une config vide. }
+  if KeepExistingConfig then Exit;
   NL := #13#10;
   S :=
     '# Configuration Jade - generee par l''installateur. Ne pas partager.' + NL +
@@ -180,6 +212,9 @@ begin
     'GITEA_API_URL=https://git.example.com' + NL +
     'GITEA_REPO=example/jade' + NL +
     'GITEA_TOKEN=' + NL +
+#ifdef SetupPassword
+    'SETUP_PASSWORD={#SetupPassword}' + NL +
+#endif
     'WEB_FALLBACK=1' + NL +
     'SEARXNG_URL=' + Trim(WebPage.Values[0]) + NL +
     'SEARXNG_CF_ACCESS_CLIENT_ID=' + Trim(WebPage.Values[1]) + NL +

@@ -45,6 +45,10 @@ class ApiClient {
   Future<AppStatus> status() async =>
       AppStatus.fromJson(await _json('GET', '/api/status'));
 
+  /// Progression du démarrage (téléchargement/chargement des modèles).
+  Future<InitStatus> initStatus() async =>
+      InitStatus.fromJson(await _json('GET', '/api/init'));
+
   // ------------------------------------------------------- mises à jour
 
   /// État de mise à jour (release Gitea la plus récente). Ne lève jamais :

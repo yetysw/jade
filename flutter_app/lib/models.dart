@@ -178,6 +178,36 @@ class Message {
       );
 }
 
+/// Progression du démarrage (miroir de /api/init) — téléchargement/chargement
+/// des modèles de recherche au 1er lancement.
+class InitStatus {
+  final String phase; // starting|downloading|loading|engine|ready
+  final String detail;
+  final int downloadedMb;
+  final int totalMb;
+  final bool ready;
+
+  const InitStatus({
+    required this.phase,
+    required this.detail,
+    required this.downloadedMb,
+    required this.totalMb,
+    required this.ready,
+  });
+
+  /// Fraction connue seulement en téléchargement (sinon barre indéterminée).
+  double? get fraction =>
+      totalMb > 0 ? (downloadedMb / totalMb).clamp(0.0, 1.0) : null;
+
+  factory InitStatus.fromJson(Map<String, dynamic> j) => InitStatus(
+        phase: j['phase'] ?? 'starting',
+        detail: j['detail'] ?? '',
+        downloadedMb: j['downloaded_mb'] ?? 0,
+        totalMb: j['total_mb'] ?? 0,
+        ready: j['ready'] == true,
+      );
+}
+
 /// État de mise à jour (miroir de /api/update).
 class UpdateInfo {
   final String current;

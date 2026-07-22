@@ -7,6 +7,26 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.4.0 — 🚧 dev : ⭐ Démarrage progressif + installateur protégé
+
+- ⭐ **Écran de démarrage avec progression** : le téléchargement des modèles de
+  recherche (au 1er lancement, ~2 Go) et leur chargement ne **bloquent plus** le
+  moteur (chargement **paresseux** de l'embedder). L'application affiche une
+  **barre de progression + un mini-journal** de ce qui se passe (téléchargement
+  Mo / Mo, chargement, démarrage du moteur) jusqu'à « Prêt ». Endpoint
+  `GET /api/init`.
+- **Correctif du faux message d'erreur au 1er lancement** : le blocage du
+  démarrage (téléchargement des modèles) déclenchait un « Backend indisponible —
+  indexation initiale en cours ? » trompeur (rien n'est indexé tant qu'aucun
+  dossier n'est configuré). Le moteur répond désormais immédiatement.
+- **Installateur protégé par mot de passe** (Inno `Encryption=yes`) : si l'exe
+  fuite, l'installation exige le mot de passe. Le mot de passe est passé **au
+  build** (`ISCC /DSetupPassword=…`), **jamais versionné** ; il est écrit dans le
+  `.env` local (`SETUP_PASSWORD`) pour que l'**auto-update reste silencieux**
+  (poste : `/PASSWORD=` ; RDS : lu depuis le `.env` installé).
+
+---
+
 ## 1.3.1 — Correctif : lancement (`.env` non-UTF-8)
 
 - **Crash au démarrage corrigé** : l'assistant d'installation écrit le `.env` en

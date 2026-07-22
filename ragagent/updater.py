@@ -251,10 +251,12 @@ def apply(settings: Settings) -> dict:
     try:
         if sys.platform == "win32":
             # Inno : ferme les applis ouvertes et relance après installation.
-            subprocess.Popen(
-                [path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS"],
-                close_fds=True,
-            )
+            args = [path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS"]
+            # installateur chiffré (protégé si l'exe fuite) : fournir le mot de
+            # passe pour que la mise à jour reste silencieuse.
+            if getattr(settings, "setup_password", ""):
+                args.append(f"/PASSWORD={settings.setup_password}")
+            subprocess.Popen(args, close_fds=True)
         elif sys.platform == "darwin":
             subprocess.Popen(["open", path])
         else:

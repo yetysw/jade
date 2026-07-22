@@ -59,8 +59,9 @@ class BackendManager {
       if (await isUp()) return null;
       await Future<void>.delayed(const Duration(seconds: 1));
     }
-    return 'Le backend ne répond pas après ${timeout.inSeconds} s '
-        '(indexation initiale en cours ?).';
+    return 'Le moteur local ne répond pas après ${timeout.inSeconds} s. '
+        'Fermer puis rouvrir l’application ; si le problème persiste, '
+        'vérifier l’antivirus ou réinstaller.';
   }
 
   /// Cherche l'exécutable backend installé à côté de l'app Flutter
