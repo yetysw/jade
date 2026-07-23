@@ -5,7 +5,7 @@
 
   **Assistant documentaire d'entreprise, « local d'abord »**
 
-  ![Version](https://img.shields.io/badge/version-1.4.2-00357F)
+  ![Version](https://img.shields.io/badge/version-1.4.3-00357F)
   ![Plateforme](https://img.shields.io/badge/Windows-10%2F11-informational)
   ![UI](https://img.shields.io/badge/interface-Flutter%20native-blue)
   ![Licence](https://img.shields.io/badge/licence-Jade%20S%C3%A0rl-lightgrey)
@@ -92,7 +92,7 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 
 ## Installation (poste client)
 
-Utiliser l'installateur `Jade-Setup-1.4.2.exe` (voir *Build* plus bas).
+Utiliser l'installateur `Jade-Setup-1.4.3.exe` (voir *Build* plus bas).
 **Aucun secret n'est embarqué dans l'installateur** : pendant l'installation,
 l'assistant demande les **identifiants d'accès Jade** (adresse du serveur LLM,
 jetons Cloudflare Access, éventuel SearXNG) et le **mot de passe administrateur**.

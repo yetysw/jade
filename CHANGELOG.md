@@ -7,6 +7,19 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.4.3 — Correctif : installateur interactif (« app constant »)
+
+- **L'installateur 1.4.0–1.4.2 plantait au lancement en mode interactif**
+  (double-clic) : `Runtime error … An attempt was made to expand the "app"
+  constant before it was initialized`. Cause : la détection de mise à jour
+  (ajoutée en 1.4.0) lisait `{app}\backend\.env` via `ExpandConstant('{app}…')`,
+  or `{app}` n'est pas encore initialisé quand l'assistant évalue les pages en
+  interactif. Les tests en mode **silencieux** ne déclenchaient pas ce chemin,
+  d'où le passage inaperçu. Corrigé : utilisation de `WizardDirValue` (toujours
+  défini pendant l'assistant) au lieu de `{app}`.
+
+---
+
 ## 1.4.2 — Modèles hébergés sur Cloudflare R2
 
 - **`MODELS_URL` pointe désormais vers Cloudflare R2** (stockage objet, pas de
