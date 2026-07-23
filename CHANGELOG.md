@@ -7,6 +7,29 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.4.2 — Modèles hébergés sur Cloudflare R2
+
+- **`MODELS_URL` pointe désormais vers Cloudflare R2** (stockage objet, pas de
+  serveur d'origine à proxifier). Un premier hébergement sur un site classique
+  derrière Cloudflare (nuage orange) échouait systématiquement au-delà d'~2 Go :
+  le proxy HTTP de Cloudflare a un timeout d'environ 120 s et ne relayait pas les
+  requêtes Range. **R2 n'a ni l'un ni l'autre problème** — vérifié : taille exacte
+  (3,2 Go, aucune troncature), `Accept-Ranges: bytes`, requête Range → `206
+  Partial Content` correct.
+- Bucket R2 exposé via un **domaine personnalisé** (`models.example.com`), pas le
+  sous-domaine `pub-*.r2.dev` : ce dernier est documenté par Cloudflare comme
+  « test uniquement », avec un débit bridé — constaté en pratique (401 après
+  quelques téléchargements de test). Un domaine personnalisé connecté à R2
+  est nativement public (pas de bouton « autoriser » séparé) et sans cette
+  limite. Vérifié : taille exacte (3,2 Go), `Accept-Ranges`, `206 Partial
+  Content`, téléchargement complet répété sans erreur.
+- Accès **public**, sans jeton R2 : les modèles (embeddings + reranker) sont des
+  poids open-source déjà librement téléchargeables sur HuggingFace, donc aucune
+  information sensible n'est exposée — distribuer une clé d'accès R2 pour
+  protéger un fichier déjà public aurait été contre-productif.
+
+---
+
 ## 1.4.1 — Correctif : téléchargement des modèles fiable
 
 - **Cause du téléchargement « bloqué » au 1er lancement identifiée** : les

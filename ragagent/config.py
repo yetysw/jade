@@ -211,6 +211,6 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         setup_password=get("SETUP_PASSWORD", ""),
         models_url=get(
             "MODELS_URL",
-            "https://git.example.com/example/jade/releases/download/models/jade-models.tar",
+            "https://models.example.com/jade-models.tar",
         ).strip(),
     )
