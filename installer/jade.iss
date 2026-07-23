@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.4.2"
+#define AppVersion "1.4.3"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -109,8 +109,15 @@ var
   WebPage: TInputQueryWizardPage;
 
 function EnvFileExists: Boolean;
+var
+  Dir: String;
 begin
-  Result := FileExists(ExpandConstant('{app}\backend\.env'));
+  // IMPORTANT : ne PAS utiliser la constante app ici. En mode interactif, elle
+  // n'est pas encore initialisee quand l'assistant evalue les pages -> erreur
+  // « An attempt was made to expand the app constant before it was initialized ».
+  // WizardDirValue (dossier cible choisi) est toujours defini pendant l'assistant.
+  Dir := WizardDirValue;
+  Result := (Dir <> '') and FileExists(Dir + '\backend\.env');
 end;
 
 { Mise a jour (un .env existe deja) ou installation silencieuse (auto-update) :
