@@ -22,6 +22,8 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+import httpx
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -137,13 +139,13 @@ class FolderAssignRequest(BaseModel):
 
 
 class RootsRequest(BaseModel):
-    password: str
+    password: str = ""  # conservé pour compat (réglages désormais sans mot de passe)
     action: str  # add | remove
     path: str
 
 
 class ReindexRequest(BaseModel):
-    password: str
+    password: str = ""  # conservé pour compat (réglages désormais sans mot de passe)
     full: bool = False
 
 
@@ -782,22 +784,15 @@ def create_app(settings: Settings) -> FastAPI:
         threading.Thread(target=_do_index, daemon=True).start()
         return {"started": True}
 
-    # ------------------------------------------------------- paramètres (admin)
+    # ------------------------------------------------------------- paramètres
 
-    def _check_pwd(pwd: str):
-        import hmac
-
-        # pas de mot de passe configuré -> réglages verrouillés (jamais un
-        # mot de passe vide accepté)
-        if not settings.settings_password:
-            raise HTTPException(403, "Aucun mot de passe administrateur configuré "
-                                     "(SETTINGS_PASSWORD)")
-        if not hmac.compare_digest(pwd or "", settings.settings_password):
-            raise HTTPException(403, "Mot de passe incorrect")
+    # NB : les réglages d'indexation ne sont plus protégés par mot de passe
+    # (décision produit 2026-07 : friction inutile en interne). L'API reste
+    # limitée à 127.0.0.1. L'endpoint unlock est conservé et répond toujours
+    # oui, pour ne pas casser une ancienne interface.
 
     @app.post("/api/settings/unlock")
     def settings_unlock(req: ReindexRequest):
-        _check_pwd(req.password)
         return {"ok": True}
 
     @app.get("/api/settings")
@@ -819,7 +814,6 @@ def create_app(settings: Settings) -> FastAPI:
     def edit_roots(req: RootsRequest):
         from ..index_config import get_roots, set_roots
 
-        _check_pwd(req.password)
         current = [str(r) for r in get_roots(settings)]
         # si on part encore du repli DOCS_DIR implicite et qu'on ajoute, on
         # démarre une liste vide pour ne pas coller le dossier de démo
@@ -843,7 +837,6 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.post("/api/settings/reindex")
     def settings_reindex(req: ReindexRequest):
-        _check_pwd(req.password)
         if state["indexing"]:
             return {"started": False, "reason": "déjà en cours"}
         threading.Thread(target=lambda: _do_index(full=req.full), daemon=True).start()
@@ -852,7 +845,6 @@ def create_app(settings: Settings) -> FastAPI:
     @app.post("/api/settings/pick-folder")
     def pick_folder(req: ReindexRequest):
         """Ouvre le sélecteur de dossier natif (application de bureau)."""
-        _check_pwd(req.password)
         picker = state.get("folder_picker")
         if not picker:
             raise HTTPException(501, "Sélecteur natif indisponible (mode navigateur)")
@@ -966,20 +958,54 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.post("/api/feedback")
     def feedback(req: FeedbackRequest):
-        """Ouvre directement le client mail : destinataire et objet pré-remplis,
-        l'objet contient le nom de la session Windows."""
+        """Envoie le retour utilisateur à Jade par e-mail via l'API Resend
+        (RESEND_API_KEY). Sans clé configurée, repli : ouvre le client mail
+        avec destinataire et objet pré-remplis."""
+        content = req.content.strip()
+        user = _session_display_name()
+        subject = f"Retour Jade — {user}"
+
+        if settings.resend_api_key:
+            if not content:
+                raise HTTPException(400, "Message vide")
+            from .. import __version__
+
+            body = (
+                f"{content}\n\n---\n"
+                f"Utilisateur : {user}\n"
+                f"Version : Jade {__version__}\n"
+                f"Client : {settings.client_name}"
+            )
+            try:
+                with httpx.Client(timeout=15.0) as client:
+                    resp = client.post(
+                        "https://api.resend.com/emails",
+                        headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                        json={
+                            "from": settings.resend_from,
+                            "to": [settings.feedback_email],
+                            "subject": subject,
+                            "text": body,
+                        },
+                    )
+                    resp.raise_for_status()
+            except httpx.HTTPError as e:
+                log.warning("Envoi du retour utilisateur échoué : %s", e)
+                raise HTTPException(
+                    502, "Envoi impossible pour le moment — réessayez plus tard.")
+            return {"ok": True, "sent": True}
+
+        # repli sans clé API : client mail local
         import urllib.parse
 
-        user = _session_display_name()
-        subject = f"Retour utilisateur - {user}"
         mailto = f"mailto:{settings.feedback_email}?subject={urllib.parse.quote(subject)}"
-        if req.content.strip():
-            mailto += f"&body={urllib.parse.quote(req.content.strip())}"
+        if content:
+            mailto += f"&body={urllib.parse.quote(content)}"
         try:
             open_url(mailto)
         except OSError as e:
             raise HTTPException(500, f"Impossible d'ouvrir le client mail : {e}")
-        return {"ok": True}
+        return {"ok": True, "sent": False}
 
     # ------------------------------------------------------------- ask
 
@@ -1439,16 +1465,19 @@ def create_app(settings: Settings) -> FastAPI:
     # ----------------------------------------------------------- fichiers
 
     @app.post("/api/open-url")
-    def open_url(req: OpenUrlRequest):
+    def open_url_route(req: OpenUrlRequest):
         """Ouvre une page web (source de recherche web) dans le navigateur par
-        défaut du poste. http/https uniquement — jamais de chemin local ici."""
+        défaut du poste. http/https uniquement — jamais de chemin local ici.
+
+        NB : la fonction ne doit PAS s'appeler open_url — elle masquerait la
+        fonction importée de ..openers (auto-appel récursif, liens cassés)."""
         from urllib.parse import urlparse
 
         parsed = urlparse(req.url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             raise HTTPException(400, "URL invalide")
         try:
-            open_url(req.url)  # navigateur par défaut du système
+            open_url(req.url)  # navigateur par défaut du système (..openers)
         except OSError as e:
             raise HTTPException(500, f"Ouverture impossible : {e}")
         return {"ok": True}
