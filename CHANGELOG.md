@@ -7,6 +7,34 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.9.0 — 🚧 dev : ⭐ Autonomie du poste (santé, sauvegarde, 1er lancement, réglages de connexion)
+
+- ⭐ **Panneau « État du système »** (réglages) + **bandeau d'alerte rouge**
+  (accueil) : serveur d'IA joignable, modèles prêts, espace disque, index.
+  Contrôle de santé au lancement et rafraîchissement périodique. Endpoint
+  `/api/health` et bloc `health` dans `/api/status`.
+- ⭐ **Sauvegarde et migration des conversations** : export **portable**
+  (déchiffré) dans un fichier `.jadebak`, restauration **re-chiffrée** avec la
+  clé DPAPI de la machine cible (une simple copie de `chats.db` ne migrerait pas,
+  le chiffrement étant lié au compte Windows). Boutons dédiés dans les réglages,
+  fichier géré par l'utilisateur. Endpoints `/api/backup` et `/api/restore`.
+- ⭐ **Premier lancement guidé** : écran d'**acceptation des CGU + politique de
+  confidentialité** (documents embarqués, adaptés à la nLPD suisse) puis
+  **onboarding** (présentation, choix d'un dossier, première question). Endpoints
+  `/api/onboarding*` ; version légale suivie pour redemander l'accord si le texte
+  change.
+- ⭐ **Édition des identifiants de connexion dans les réglages** (adresses des
+  services + service token Cloudflare Access) : plus besoin de réinstaller ni
+  d'éditer le `.env` à la main. Écriture du `.env`, **scellement DPAPI** et
+  **application à chaud** (sans redémarrage). Endpoints `GET`/`POST` `/api/config`.
+- **Documentation** : refonte des CGU et de la politique de confidentialité
+  (droit suisse, nLPD/OPDo) et **runbook de déploiement des licences** en
+  facturation manuelle (`docs/deploiement-licences.md`).
+- **Tests** : couverture portée à **52 tests** (licences client + serveur,
+  configuration, sécurité DPAPI), tous hors réseau et déterministes.
+- **Build** : `jwt`/`cryptography` embarqués de façon fiable dans le bundle
+  PyInstaller ; documents légaux inclus dans l'exécutable.
+
 ## 1.8.0 — 🚧 dev : ⭐ Système de licences (optionnel)
 
 - ⭐ **Serveur de licences `licsrv/`** (interne, jamais livré) : FastAPI + SQLite,
