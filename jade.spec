@@ -14,6 +14,8 @@ binaries = []
 hiddenimports = [
     "ragagent",
     # importés paresseusement (dans des fonctions) — sécurise l'analyse
+    # jwt : import différé dans licensing.py (vérification EdDSA de la licence)
+    "jwt",
     "docx", "openpyxl", "xlrd", "extract_msg", "odf", "odf.opendocument",
     "odf.text", "odf.teletype", "pypdf", "pypdfium2", "rank_bm25",
     "winreg", "uvicorn.logging", "uvicorn.loops", "uvicorn.loops.auto",
@@ -28,8 +30,10 @@ hiddenimports = [
 # indispensable, sinon la création PowerPoint plante dans l'exe (comme reportlab)
 # NB : plus de rapidocr/opencv (OCR, ~125 Mo) ni webview/.NET (ancienne UI) —
 # l'interface est Flutter et l'OCR dégrade proprement (ocr.available() -> False).
+# cryptography : bindings OpenSSL (EdDSA de la licence) — collecte complète pour
+# embarquer les modules binaires de manière fiable dans l'exe gelé
 for pkg in ("chromadb", "fastembed", "onnxruntime",
-            "tokenizers", "reportlab", "pptx"):
+            "tokenizers", "reportlab", "pptx", "cryptography"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
