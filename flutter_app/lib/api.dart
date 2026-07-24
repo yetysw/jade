@@ -23,6 +23,8 @@ String backendBase = 'http://127.0.0.1:8765';
 /// appel sans ce jeton — c'est ce qui isole les sessions RDS entre elles.
 String? backendToken;
 
+/// Client type du backend local (`127.0.0.1`) : requetes HTTP et flux SSE de
+/// l'endpoint /ask. Joint le jeton de session ([backendToken]) a chaque appel.
 class ApiClient {
   final http.Client _client = http.Client();
 

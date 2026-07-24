@@ -9,6 +9,8 @@ import 'models.dart';
 import 'tabler.dart';
 import 'theme.dart';
 
+/// Panneau lateral listant les sources citees d'une reponse, avec surlignage
+/// de la source active et ouverture du document d'origine.
 class SourcesPanel extends StatelessWidget {
   final List<Source> sources;
   final int? highlight;

@@ -19,6 +19,8 @@ import 'theme.dart';
 /// Largeur de lecture confortable pour le fil et le composer.
 const double _kColumn = 768;
 
+/// Vue de conversation : fil des messages, composer, streaming de la reponse
+/// (SSE) et panneau des sources. Rattachee au [HomeScreenState] hote.
 class ChatView extends StatefulWidget {
   final ApiClient api;
   final HomeScreenState home;
@@ -28,6 +30,8 @@ class ChatView extends StatefulWidget {
   State<ChatView> createState() => ChatViewState();
 }
 
+/// Etat de [ChatView] : messages en cours, requete de streaming active,
+/// suggestions d'accueil et questions de suivi.
 class ChatViewState extends State<ChatView> {
   final List<Message> _messages = [];
   final _inputCtl = TextEditingController();

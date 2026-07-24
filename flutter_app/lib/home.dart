@@ -18,6 +18,8 @@ import 'tabler.dart';
 import 'theme.dart';
 import 'update.dart';
 
+/// Ecran principal : barre laterale (conversations, dossiers, reglages, mise a
+/// jour) et zone de conversation active.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -25,6 +27,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => HomeScreenState();
 }
 
+/// Etat de [HomeScreen] : detient le [ApiClient] partage et les listes
+/// (conversations, dossiers, statut, mise a jour). Expose aux vues filles.
 class HomeScreenState extends State<HomeScreen> {
   final api = ApiClient();
 
