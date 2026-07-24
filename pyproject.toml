@@ -1,6 +1,6 @@
 [project]
 name = "jade"
-version = "1.6.0"
+version = "1.7.0"
 description = "Jade — assistant documentaire local : indexation locale, retrieval local, generation via LLM central (Ollama/AI01)"
 requires-python = ">=3.12"
 dependencies = [
@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pyinstaller>=6.0"]
+dev = ["pyinstaller>=6.0", "pytest>=8.0"]
 # OCR local des scans/images (~125 Mo avec OpenCV) — exclu de l'exe léger ;
 # l'application dégrade proprement sans (ocr.available() -> False).
 ocr = ["rapidocr-onnxruntime>=1.3"]

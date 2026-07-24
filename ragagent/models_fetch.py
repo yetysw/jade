@@ -21,6 +21,7 @@ modèles sans aucun appel réseau (validé hors-ligne).
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import tarfile
 import time
@@ -57,14 +58,37 @@ def _dir_size(path: Path) -> int:
     return total
 
 
+def _sha256(path: Path, progress: Progress | None = None) -> str:
+    """SHA-256 hexadécimal d'un fichier, lu par blocs (archive ~3 Go)."""
+    h = hashlib.sha256()
+    size = path.stat().st_size
+    done = 0
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(_CHUNK)
+            if not chunk:
+                break
+            h.update(chunk)
+            done += len(chunk)
+            if progress:
+                progress("verifying", done, size)
+    return h.hexdigest()
+
+
 def fetch_and_extract(
     url: str,
     cache_dir: Path,
     token: str = "",
     progress: Progress | None = None,
+    sha256: str = "",
 ) -> None:
     """Télécharge l'archive .tar (avec reprise/retries) puis l'extrait dans le
-    cache. Lève en cas d'échec définitif (l'appelant retombe alors sur HF)."""
+    cache. Lève en cas d'échec définitif (l'appelant retombe alors sur HF).
+
+    Si `sha256` est renseigné (config MODELS_SHA256), l'empreinte SHA-256 de
+    l'archive téléchargée est vérifiée AVANT extraction : en cas de non-
+    correspondance le fichier partiel est supprimé et une erreur est levée
+    (protection contre une archive corrompue ou substituée)."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     part = cache_dir / ".jade-models.tar.part"
     base_headers = {"Authorization": f"token {token}"} if token else {}
@@ -101,6 +125,18 @@ def fetch_and_extract(
             if attempt == _RETRIES:
                 raise
             time.sleep(min(20, 2 ** attempt))
+
+    # Vérification d'intégrité (facultative) avant toute extraction : on ne fait
+    # confiance à l'archive que si son empreinte correspond à celle attendue.
+    if sha256:
+        expected = sha256.strip().lower()
+        actual = _sha256(part, progress)
+        if actual != expected:
+            part.unlink(missing_ok=True)
+            raise ValueError(
+                f"Empreinte SHA-256 des modèles invalide "
+                f"(attendu {expected}, obtenu {actual}) — archive refusée."
+            )
 
     if progress:
         progress("extracting", 0, 0)

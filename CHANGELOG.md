@@ -7,6 +7,46 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.7.0 — 🚧 dev : ⭐ Durcissement sécurité (audit) + robustesse LLM
+
+Issu d'un audit par une équipe de 7 sous-agents, re-validé par des agents
+sécurité et QA.
+
+**Sécurité**
+- ⭐ **Isolation inter-session RDS** : l'API locale exige désormais un **jeton de
+  session** (`X-Jade-Token`, comparaison constant-time) sur toutes les routes
+  `/api/*`. Le jeton est généré par backend, publié dans `backend.json` (ACL
+  par-utilisateur) et injecté par l'app. Sur RDS le loopback est commun aux
+  sessions : sans ce jeton, un co-utilisateur pouvait atteindre le backend d'un
+  autre (lecture des conversations/mémoire, etc.). Corrige aussi la réutilisation
+  de port (la découverte rejette un backend au jeton non concordant).
+- **`.env` : ACL restrictive posée AVANT l'écriture des secrets** + code retour
+  d'`icacls` vérifié (plus de fenêtre en clair ; échec signalé).
+- **Vérification d'intégrité SHA-256 des modèles ACTIVÉE** (`MODELS_SHA256`
+  renseigné, empreinte vérifiée contre R2 ; repli HuggingFace si non concordant).
+- **Filtrage NTFS appliqué AVANT la troncature** : un utilisateur restreint
+  reçoit jusqu'à 8 extraits *lisibles* au lieu de « 8 moins les masqués ».
+
+**Robustesse / concurrence LLM**
+- **Annulation qui coupe réellement Ollama** (`gen.close()` en `finally`) : libère
+  le slot GPU au lieu de laisser la génération continuer — corrige la saturation.
+- `think=False` explicite sur la génération principale (plus de fuite `<think>`).
+- Warmup **sans retry** et appels de confort (routeur, titre, suivi, accueil) en
+  `retry=False` + timeout court : n'amplifient plus la saturation, ne bloquent
+  plus 120 s.
+
+**Qualité / UI / tests**
+- **Socle de tests** (`pytest`) : semver auto-update, fusion RRF, garde du routeur.
+- UI : cartes d'accueil aux couleurs du thème (lisibles en sombre) ; dialogue
+  Réglages à largeur bornée (plus de débordement).
+
+*Restent à traiter (documentés) : compte de service pour lire le `.env` sur RDS
+(l'ACL admins exclut les standards) ; frontière de préfixe sur `/api/open`
+(hygiène, rendue quasi-nulle par le jeton) ; synchro de `MODELS_SHA256` à chaque
+nouvelle archive.*
+
+---
+
 ## 1.6.0 — 🚧 dev : ⭐ Durcissement sécurité (RDS) + retour par e-mail
 
 - ⭐ **Isolation par session RDS** : le backend choisit un **port libre par

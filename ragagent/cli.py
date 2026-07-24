@@ -227,27 +227,35 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def _write_discovery(settings, port: int) -> None:
-    """Publie le port du backend de CETTE session dans %LOCALAPPDATA%\\Jade —
-    par utilisateur, donc chaque session RDS voit uniquement le sien."""
+def _write_discovery(settings, port: int, token: str) -> None:
+    """Publie port + jeton de session du backend de CETTE session dans
+    %LOCALAPPDATA%\\Jade — par utilisateur. Le jeton authentifie l'UI auprès de
+    SON backend : sur RDS le loopback est commun à toutes les sessions, donc le
+    port seul ne suffit pas (un co-utilisateur peut le trouver via netstat).
+    backend.json hérite de l'ACL du profil utilisateur → illisible par un autre
+    utilisateur standard, donc son jeton reste secret."""
     import os
 
-    info = {"port": port, "pid": os.getpid()}
+    info = {"port": port, "pid": os.getpid(), "token": token}
     path = settings.user_data_dir / "backend.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(info), encoding="utf-8")
 
 
 def _already_running(settings) -> int | None:
-    """Port d'un backend déjà vivant pour CET utilisateur, sinon None."""
+    """Port d'un backend déjà vivant pour CET utilisateur, sinon None. Le jeton
+    est vérifié : un backend qui répond sans notre jeton (port réutilisé par la
+    session d'un autre utilisateur) est rejeté."""
     import httpx
 
     path = settings.user_data_dir / "backend.json"
     if not path.exists():
         return None
     try:
-        port = int(json.loads(path.read_text(encoding="utf-8"))["port"])
-        r = httpx.get(f"http://127.0.0.1:{port}/api/status", timeout=2.0)
+        info = json.loads(path.read_text(encoding="utf-8"))
+        port, token = int(info["port"]), info.get("token", "")
+        r = httpx.get(f"http://127.0.0.1:{port}/api/status",
+                      headers={"X-Jade-Token": token}, timeout=2.0)
         if r.status_code == 200 and r.json().get("app_name") == "Jade":
             return port
     except Exception:
@@ -256,6 +264,8 @@ def _already_running(settings) -> int | None:
 
 
 def _cmd_serve(settings) -> int:
+    import secrets
+
     import uvicorn
 
     if settings.ui_host not in ("127.0.0.1", "localhost", "::1"):
@@ -276,8 +286,9 @@ def _cmd_serve(settings) -> int:
 
     from .web.app import create_app
 
-    app = create_app(settings)
-    _write_discovery(settings, port)
+    token = secrets.token_urlsafe(32)
+    app = create_app(settings, token=token)
+    _write_discovery(settings, port, token)
     print(f"* Backend local (API) : http://{settings.ui_host}:{port} "
           "— interface : application native (flutter_app/)")
     uvicorn.run(app, host=settings.ui_host, port=port, log_level="warning")

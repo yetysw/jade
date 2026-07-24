@@ -59,13 +59,22 @@ class OllamaClient:
                 )
             raise LLMError(f"Erreur HTTP {status} de {url} : {text[:300]}")
 
-    def _request(self, method: str, path: str, body: dict | None = None) -> dict:
+    def _request(self, method: str, path: str, body: dict | None = None,
+                 retry: bool = True, timeout: float | None = None) -> dict:
+        """retry=False : une seule tentative (appels courts routeur/titre/suivi/
+        warmup — sous saturation GPU, Ollama renvoie des 5xx ; réessayer 3× ces
+        appels ne ferait qu'empiler des jobs et aggraver la saturation).
+        timeout : plafond dédié (s) pour ne pas qu'un petit appel reste 120 s en
+        file derrière de grosses générations."""
         url = f"{self.s.ollama_url}{path}"
         log_outbound(self.s.outbound_log, method, url, self.headers, body)
         last_error: Exception | None = None
-        for attempt in range(len(RETRY_DELAYS) + 1):
+        attempts = len(RETRY_DELAYS) + 1 if retry else 1
+        for attempt in range(attempts):
             try:
-                resp = self._client.request(method, url, headers=self.headers, json=body)
+                kw = {} if timeout is None else {"timeout": timeout}
+                resp = self._client.request(
+                    method, url, headers=self.headers, json=body, **kw)
                 if resp.status_code >= 500:
                     raise httpx.HTTPStatusError(
                         f"HTTP {resp.status_code}", request=resp.request, response=resp
@@ -82,7 +91,7 @@ class OllamaClient:
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout,
                     httpx.HTTPStatusError) as e:
                 last_error = e
-                if attempt < len(RETRY_DELAYS):
+                if retry and attempt < len(RETRY_DELAYS):
                     delay = RETRY_DELAYS[attempt]
                     log.warning("Appel LLM echoue (%s), nouvel essai dans %ds", e, delay)
                     time.sleep(delay)
@@ -114,6 +123,8 @@ class OllamaClient:
                     "POST", "/api/generate",
                     {"model": m, "keep_alive": self.s.keep_alive,
                      "options": {"num_ctx": self.s.num_ctx}},
+                    retry=False,  # au démarrage simultané de N sessions RDS, ne pas
+                    # empiler 3× les préchauffages en cas de 5xx (saturation)
                 )
                 log.info("Modele %s precharge (num_ctx=%d)", m, self.s.num_ctx)
             except LLMError as e:
@@ -145,10 +156,12 @@ class OllamaClient:
     def chat(
         self, messages: list[dict], model: str | None = None,
         options: dict | None = None, think: bool | None = None,
+        retry: bool = True, timeout: float | None = None,
     ) -> str:
         data = self._request(
             "POST", "/api/chat",
             self._chat_body(messages, stream=False, model=model, options=options, think=think),
+            retry=retry, timeout=timeout,
         )
         try:
             return data["message"]["content"]

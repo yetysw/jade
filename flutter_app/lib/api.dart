@@ -18,6 +18,11 @@ import 'models.dart';
 /// avant l'ouverture de l'interface. 8765 = repli développement.
 String backendBase = 'http://127.0.0.1:8765';
 
+/// Jeton de session partagé UI↔backend (lu depuis backend.json par
+/// BackendManager). Envoyé sur chaque requête : le backend rejette (401) tout
+/// appel sans ce jeton — c'est ce qui isole les sessions RDS entre elles.
+String? backendToken;
+
 class ApiClient {
   final http.Client _client = http.Client();
 
@@ -26,6 +31,7 @@ class ApiClient {
   Future<dynamic> _json(String method, String path, [Object? body]) async {
     final req = http.Request(method, _u(path));
     req.headers['Content-Type'] = 'application/json';
+    if (backendToken != null) req.headers['X-Jade-Token'] = backendToken!;
     if (body != null) req.body = jsonEncode(body);
     final streamed = await _client.send(req);
     final resp = await http.Response.fromStream(streamed);
@@ -191,6 +197,7 @@ class ApiClient {
   }) async* {
     final req = http.Request('POST', _u('/api/conversations/$cid/ask'));
     req.headers['Content-Type'] = 'application/json';
+    if (backendToken != null) req.headers['X-Jade-Token'] = backendToken!;
     req.body = jsonEncode({
       'question': question,
       'req_id': reqId ?? '',

@@ -34,40 +34,47 @@ class BackendManager {
     return '${xdg ?? '$home/.local/share'}/Jade';
   }
 
-  /// Port publié par le backend de cette session, ou null.
-  static int? discoveredPort() {
+  /// Port + jeton publiés par le backend de cette session, ou null.
+  static (int, String)? _discovered() {
     final dir = userDataDir();
     if (dir == null) return null;
     final f = File('$dir${Platform.pathSeparator}backend.json');
     if (!f.existsSync()) return null;
     try {
       final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
-      return j['port'] as int?;
+      final port = j['port'] as int?;
+      final token = j['token'] as String?;
+      if (port == null || token == null) return null;
+      return (port, token);
     } catch (_) {
       return null;
     }
   }
 
-  /// Vrai si un backend répond sur ce port ; fixe `backendBase` si oui.
-  Future<bool> _probe(int port) async {
+  /// Vrai si NOTRE backend répond sur ce port (jeton accepté) ; fixe
+  /// `backendBase`/`backendToken` si oui. Un backend qui répond 401 (jeton
+  /// refusé) appartient à une autre session → considéré indisponible.
+  Future<bool> _probe(int port, String token) async {
     try {
       final base = 'http://127.0.0.1:$port';
-      final resp = await http
-          .get(Uri.parse('$base/api/status'))
-          .timeout(const Duration(seconds: 2));
+      final resp = await http.get(
+        Uri.parse('$base/api/status'),
+        headers: {'X-Jade-Token': token},
+      ).timeout(const Duration(seconds: 2));
       if (resp.statusCode == 200) {
         backendBase = base;
+        backendToken = token;
         return true;
       }
     } catch (_) {}
     return false;
   }
 
-  /// Cherche un backend vivant : port publié d'abord, 8765 (dev) en repli.
+  /// Cherche NOTRE backend vivant via le fichier de découverte (port + jeton).
   Future<bool> isUp() async {
-    final published = discoveredPort();
-    if (published != null && await _probe(published)) return true;
-    return _probe(8765);
+    final d = _discovered();
+    if (d != null && await _probe(d.$1, d.$2)) return true;
+    return false;
   }
 
   /// S'assure que le backend tourne ; le lance s'il est installé à côté.
