@@ -21,6 +21,20 @@ OUTPUT_DIR = Path.home() / "Documents" / "Jade"
 _TABLE_ROW = re.compile(r"^\s*\|(.+)\|\s*$")
 _TABLE_SEP = re.compile(r"^\s*\|[\s:\-|]+\|\s*$")
 
+# Protection contre l'injection de formule (CSV/Excel injection) : une cellule
+# commençant par = + - @ ou une tabulation/retour chariot peut être interprétée
+# comme une formule à l'ouverture dans Excel/LibreOffice. On la neutralise en la
+# préfixant d'une apostrophe (convention standard ; la valeur reste lisible).
+# N'est appliqué qu'aux sorties tabulaires (CSV, XLSX), jamais aux autres formats.
+_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _formula_safe(value) -> str:
+    s = "" if value is None else str(value)
+    if s and s[0] in _FORMULA_LEAD:
+        return "'" + s
+    return s
+
 
 def _out_path(title: str, ext: str) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -97,7 +111,7 @@ def save_xlsx(title: str, text: str) -> Path:
         for t_i, table in enumerate(tables):
             for i, row in enumerate(table):
                 for j, cell in enumerate(row, start=1):
-                    c = ws.cell(row=row_idx, column=j, value=cell)
+                    c = ws.cell(row=row_idx, column=j, value=_formula_safe(cell))
                     if i == 0:
                         c.font = Font(bold=True)
                 row_idx += 1
@@ -109,7 +123,7 @@ def save_xlsx(title: str, text: str) -> Path:
         # pas de tableau dans la reponse : une ligne de texte par cellule
         for i, (kind, payload) in enumerate(_parse_blocks(text), start=1):
             if kind != "table":
-                ws.cell(row=i, column=1, value=str(payload))
+                ws.cell(row=i, column=1, value=_formula_safe(payload))
         ws.column_dimensions["A"].width = 100
     path = _out_path(title, "xlsx")
     wb.save(str(path))
@@ -220,12 +234,12 @@ def save_csv(title: str, text: str) -> Path:
         if tables:
             for t in tables:
                 for row in t:
-                    w.writerow(row)
+                    w.writerow([_formula_safe(c) for c in row])
                 w.writerow([])
         else:
             for kind, payload in _parse_blocks(text):
                 if kind != "table":
-                    w.writerow([str(payload)])
+                    w.writerow([_formula_safe(payload)])
     return path
 
 

@@ -169,10 +169,12 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   Widget build(BuildContext context) {
     final jade = context.jade;
+    final size = MediaQuery.of(context).size;
     return Container(
-      width: 560,
-      constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.86),
+      // largeur bornée (et non fixe) : évite le débordement horizontal sur une
+      // fenêtre étroite (< 560 px + marges).
+      width: size.width < 620 ? size.width - JadeSpace.xxl * 2 : 560,
+      constraints: BoxConstraints(maxHeight: size.height * 0.86),
       decoration: BoxDecoration(
         color: jade.bg,
         borderRadius: JadeRadius.all(JadeRadius.lg),

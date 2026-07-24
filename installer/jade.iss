@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.6.0"
+#define AppVersion "1.7.0"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -213,6 +213,7 @@ begin
     'GITEA_REPO=example/jade' + NL +
     'GITEA_TOKEN=' + NL +
     'MODELS_URL=https://models.example.com/jade-models.tar' + NL +
+    'MODELS_SHA256=a866bbb60661354944d42364dba4cc5b3496dea97bbadb381b94edd0af04e3a5' + NL +
 #ifdef SetupPassword
     'SETUP_PASSWORD={#SetupPassword}' + NL +
 #endif
@@ -226,24 +227,35 @@ begin
   SaveStringToFile(ExpandConstant('{app}\backend\.env'), S, False);
 end;
 
-{ Restreint la lecture du .env aux administrateurs + SYSTEM (retire le groupe
-  Users). Sur un serveur RDS, un utilisateur standard ne peut alors plus lire
-  les jetons Cloudflare. icacls est present sur tout Windows. }
-procedure LockEnvAcl;
+{ Cree le .env VIDE puis pose une ACL restrictive (Administrateurs + SYSTEM,
+  heritage retire) AVANT d'y ecrire le moindre secret : ainsi il n'existe jamais
+  de fenetre ou le .env en clair est lisible par le groupe Users (ACL heritee de
+  Program Files). Le code retour d'icacls est verifie et signale.
+  LIMITE RDS connue : cette ACL empeche un utilisateur STANDARD de lire le .env
+  -> convient a un poste client (utilisateur = admin local), mais sur un serveur
+  RDS multi-utilisateurs le backend tourne sous chaque utilisateur standard et
+  ne pourrait alors PAS lire le .env. Le durcissement correct pour RDS est un
+  compte de service dedie (a mettre en place avant tout deploiement RDS). Le
+  controle de fond reste la revocation du service token Cloudflare par client. }
+procedure PrepEnvAcl;
 var
   envPath: String;
   rc: Integer;
 begin
   envPath := ExpandConstant('{app}\backend\.env');
-  if not FileExists(envPath) then Exit;
-  Exec(ExpandConstant('{sys}\icacls.exe'),
-    '"' + envPath + '" /inheritance:r /grant:r "*S-1-5-32-544:R" "*S-1-5-18:F" "*S-1-5-32-544:F"',
-    '', SW_HIDE, ewWaitUntilTerminated, rc);
+  SaveStringToFile(envPath, '', False);  { cree le fichier vide }
+  if not Exec(ExpandConstant('{sys}\icacls.exe'),
+      '"' + envPath + '" /inheritance:r /grant:r "*S-1-5-18:F" "*S-1-5-32-544:F"',
+      '', SW_HIDE, ewWaitUntilTerminated, rc) or (rc <> 0) then
+    MsgBox('Avertissement : le verrouillage des droits du fichier de '
+      + 'configuration a echoue (code ' + IntToStr(rc) + '). Les identifiants '
+      + 'pourraient etre lisibles par d''autres utilisateurs de ce poste.',
+      mbError, MB_OK);
 end;
 
 { Scelle les secrets du .env (DPAPI machine) via le backend. Ainsi le .env,
   meme lu, ne livre pas les secrets en clair, et reste dechiffrable par toutes
-  les sessions de CETTE machine (RDS). }
+  les sessions de CETTE machine. }
 procedure SealEnv;
 var
   rc: Integer;
@@ -256,11 +268,10 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    WriteEnvFile;
     if not KeepExistingConfig then
-    begin
+      PrepEnvAcl;   { ACL restrictive AVANT d'ecrire les secrets }
+    WriteEnvFile;   { ecrit dans le fichier deja restreint }
+    if not KeepExistingConfig then
       SealEnv;      { chiffre les secrets (DPAPI machine) }
-      LockEnvAcl;   { restreint l'ACL du .env }
-    end;
   end;
 end;

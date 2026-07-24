@@ -177,6 +177,10 @@ def route_question(
             model=model or None,
             options={"temperature": 0, "num_predict": 80},
             think=False,  # qwen3… : pas de bloc <think> qui noierait la sortie
+            # pré-analyse bloquante avant le 1er token : pas de retry (n'amplifie
+            # pas la saturation) et timeout court (le repli heuristique prend le
+            # relais si ça traîne, plutôt que de bloquer 120 s).
+            retry=False, timeout=20.0,
         ) or "").strip()
         m = _ROUTE_RE.search(out)
         if not m:

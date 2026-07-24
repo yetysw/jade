@@ -138,14 +138,22 @@ RERANK_POOL = 24
 
 def retrieve_timed(
     question: str, history: list[dict], settings: Settings, embedder: Embedder, store: Store,
-    bm25=None, reranker=None,
+    bm25=None, reranker=None, readable=None,
 ) -> tuple[list[dict], dict]:
     """Retourne (hits, timings). Recherche hybride si bm25 est fourni :
     vectoriel + BM25 fusionnés (RRF), reranker optionnel. Sinon vectoriel seul.
 
     Nombre de sources adaptatif : 0 à 10 selon la pertinence — parfois une seule,
-    parfois aucune (question hors du périmètre des documents)."""
+    parfois aucune (question hors du périmètre des documents).
+
+    `readable` : prédicat optionnel `chemin -> bool` (droits NTFS de l'utilisateur
+    courant). Appliqué AVANT la troncature finale : un utilisateur restreint reçoit
+    ainsi jusqu'à N extraits *lisibles* au lieu de « N moins les masqués » (sinon
+    des extraits lisibles plus bas dans le classement seraient perdus)."""
     from .hybrid import rrf_fuse
+
+    def _ok(c: dict) -> bool:
+        return readable is None or readable((c.get("meta") or {}).get("path"))
 
     query = retrieval_query(question, history)
     t0 = time.perf_counter()
@@ -169,7 +177,7 @@ def retrieve_timed(
         hits = [{"text": h["text"], "meta": h["meta"], "score": h["score"]} for h in vec_hits]
         if hits:
             cutoff = max(settings.min_score, hits[0]["score"] - 0.2)
-            hits = [h for h in hits if h["score"] >= cutoff][:10]
+            hits = [h for h in hits if h["score"] >= cutoff and _ok(h)][:10]
         return hits, {"embed_ms": round((t1 - t0) * 1000),
                       "search_ms": round((t2 - t1) * 1000)}
 
@@ -201,7 +209,8 @@ def retrieve_timed(
         pool = sorted(pool, key=lambda c: c["score"], reverse=True)
         timings["rerank_ms"] = round((time.perf_counter() - t4) * 1000)
         best = pool[0]["score"] if pool else 0
-        hits = [c for c in pool if c["score"] >= max(settings.min_score, best - 0.25)][:8]
+        hits = [c for c in pool
+                if c["score"] >= max(settings.min_score, best - 0.25) and _ok(c)][:8]
         return hits, timings
 
     # sans reranker : garder les candidats pertinents — vectoriel au-dessus du
@@ -213,6 +222,8 @@ def retrieve_timed(
     for i in order:
         c = by_id.get(i)
         if not c:
+            continue
+        if not _ok(c):
             continue
         if (c["score"] is not None and c["score"] >= settings.min_score) or i in bm_top:
             keep.append(c)

@@ -306,12 +306,18 @@ class _TitleBar extends StatelessWidget {
 // ================================================================ accueil
 
 /// Style d'une suggestion selon son type (icône, couleur, intitulé de carte).
-(IconData, Color, String) _suggestionStyle(String kind) => switch (kind) {
-      'web' => (TablerIcons.worldSearch, const Color(0xFF00357F), 'Recherche web'),
-      'file' => (TablerIcons.filePlus, const Color(0xFFC07A12), 'Créer un fichier'),
-      _ => (TablerIcons.fileText, const Color(0xFF0C7C5A),
-          'Chercher dans les documents'),
-    };
+/// Couleurs prises dans le thème (jade) : en dur, le bleu/vert restaient figés
+/// et devenaient illisibles en thème sombre.
+(IconData, Color, String) _suggestionStyle(BuildContext context, String kind) {
+  final jade = context.jade;
+  // pas de token « ambre » dans le thème : accent adapté au clair/sombre
+  final amber = context.isDark ? const Color(0xFFE0A94A) : const Color(0xFFC07A12);
+  return switch (kind) {
+    'web' => (TablerIcons.worldSearch, jade.primary, 'Recherche web'),
+    'file' => (TablerIcons.filePlus, amber, 'Créer un fichier'),
+    _ => (TablerIcons.fileText, jade.secondary, 'Chercher dans les documents'),
+  };
+}
 
 const _defaultSuggestions = [
   Suggestion(
@@ -385,7 +391,7 @@ class _WelcomeView extends StatelessWidget {
                 children: [
                   for (final s in items)
                     Builder(builder: (context) {
-                      final (icon, tint, title) = _suggestionStyle(s.kind);
+                      final (icon, tint, title) = _suggestionStyle(context, s.kind);
                       return _SuggestionCard(
                         icon: icon,
                         title: title,

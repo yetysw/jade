@@ -108,6 +108,10 @@ class Settings:
     # au 1er lancement au lieu de HuggingFace (fiable, sur votre infra). Vide =
     # HuggingFace directement. Voir models_fetch.py.
     models_url: str
+    # Empreinte SHA-256 attendue de l'archive .tar des modèles (hex). Vide = pas
+    # de vérification (comportement historique). Si renseignée, une archive dont
+    # l'empreinte diffère est refusée avant extraction. Voir models_fetch.py.
+    models_sha256: str
 
     # Extensions prises en charge par les parseurs (voir ingest/parsers.py)
     extensions: tuple[str, ...] = field(
@@ -231,4 +235,5 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
             "MODELS_URL",
             "https://models.example.com/jade-models.tar",
         ).strip(),
+        models_sha256=get("MODELS_SHA256", "").strip(),
     )

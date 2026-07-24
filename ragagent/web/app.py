@@ -350,25 +350,38 @@ def _parse_welcome(raw: str) -> list[dict]:
     return out
 
 
-def create_app(settings: Settings) -> FastAPI:
+def create_app(settings: Settings, token: str = "") -> FastAPI:
     app = FastAPI(title="Jade", docs_url=None, redoc_url=None)
 
     @app.middleware("http")
-    async def _host_guard(request, call_next):
-        """Anti DNS-rebinding : un site web malveillant ouvert dans un
-        navigateur du poste peut faire pointer son domaine vers 127.0.0.1 et
-        atteindre cette API. Le navigateur enverra alors SON domaine en Host —
-        on rejette tout Host qui n'est pas le loopback (port ignoré : il est
-        dynamique par session)."""
+    async def _guard(request, call_next):
+        """Deux gardes en une passe.
+
+        1. Anti DNS-rebinding : un site malveillant ouvert dans un navigateur du
+           poste peut pointer son domaine vers 127.0.0.1 ; le navigateur enverra
+           alors SON domaine en Host — on rejette tout Host non-loopback.
+        2. Isolation inter-session (RDS) : le loopback est COMMUN à toutes les
+           sessions et le port est trouvable (netstat). Sans authentification, un
+           co-utilisateur atteindrait le backend d'un autre. On exige donc le
+           jeton de session (X-Jade-Token) sur toutes les routes /api/*. Le jeton
+           vit dans backend.json (ACL par-utilisateur) → un autre utilisateur
+           standard ne peut pas le lire."""
+        from fastapi.responses import JSONResponse
+
         raw = (request.headers.get("host") or "").lower()
         if raw.startswith("["):  # IPv6 : [::1] ou [::1]:port
             host = raw.split("]", 1)[0] + "]"
         else:
             host = raw.rsplit(":", 1)[0] if ":" in raw else raw
         if host not in ("127.0.0.1", "localhost", "[::1]"):
-            from fastapi.responses import JSONResponse
-
             return JSONResponse({"detail": "Hôte non autorisé"}, status_code=421)
+
+        if token and request.url.path.startswith("/api/"):
+            import hmac
+
+            sent = request.headers.get("x-jade-token", "")
+            if not hmac.compare_digest(sent, token):
+                return JSONResponse({"detail": "Non autorisé"}, status_code=401)
         return await call_next(request)
 
     # Chiffrement au repos (EFS) : index partagé + conversations par utilisateur
@@ -508,7 +521,8 @@ def create_app(settings: Settings) -> FastAPI:
                                 detail="Décompression des modèles…")
             try:
                 models_fetch.fetch_and_extract(
-                    settings.models_url, cache, settings.gitea_token, _p)
+                    settings.models_url, cache, settings.gitea_token, _p,
+                    sha256=settings.models_sha256)
                 cached = True
             except Exception as e:
                 log.warning("Modèles indisponibles depuis %s (%s) ; repli HuggingFace",
@@ -582,6 +596,7 @@ def create_app(settings: Settings) -> FastAPI:
                 {"role": "user", "content":
                     f"Question : {question[:300]}\nRéponse : {answer[:400]}\n\nTitre :"},
             ], model=settings.router_model or None, think=False,
+               retry=False, timeout=20.0,  # confort : ne pas amplifier/bloquer sous charge
             ).strip().strip('"«»“” ').rstrip(".")
             title = title.splitlines()[0].strip()[:60]
             if len(title) < 3:
@@ -616,6 +631,7 @@ def create_app(settings: Settings) -> FastAPI:
                 ],
                 model=settings.router_model or None, think=False,
                 options={"temperature": 0.3, "num_predict": 90},
+                retry=False, timeout=20.0,
             )
         except Exception as e:
             log.debug("Suggestions de suivi échouées : %s", e)
@@ -669,6 +685,7 @@ def create_app(settings: Settings) -> FastAPI:
                     ],
                     model=settings.router_model or None, think=False,
                     options={"temperature": 0.5, "num_predict": 120},
+                    retry=False, timeout=20.0,
                 )
                 parsed = _parse_welcome(raw)
                 if parsed:
@@ -1140,19 +1157,28 @@ def create_app(settings: Settings) -> FastAPI:
             ttfb_ms = None
             llm_stats: dict = {}
             interrupted = False
-            for event in llm.chat_stream(messages, model=model, num_ctx=num_ctx):
-                # arrêt demandé : on sort de la boucle, ce qui referme le flux
-                # HTTP vers Ollama (fin du generator) et stoppe la génération.
-                if cancel.is_set():
-                    interrupted = True
-                    break
-                if event.get("done"):
-                    llm_stats = event["stats"]
-                    break
-                if ttfb_ms is None:
-                    ttfb_ms = round((time.perf_counter() - t_llm) * 1000)
-                answer_parts.append(event["delta"])
-                yield _sse({"type": "token", "delta": event["delta"]})
+            # think=False explicite : sans ça, un qwen3 dont le « thinking » est
+            # actif par défaut streamerait des blocs <think> visibles à l'écran.
+            gen = llm.chat_stream(messages, model=model, num_ctx=num_ctx, think=False)
+            try:
+                for event in gen:
+                    if cancel.is_set():
+                        interrupted = True
+                        break
+                    if event.get("done"):
+                        llm_stats = event["stats"]
+                        break
+                    if ttfb_ms is None:
+                        ttfb_ms = round((time.perf_counter() - t_llm) * 1000)
+                    answer_parts.append(event["delta"])
+                    yield _sse({"type": "token", "delta": event["delta"]})
+            finally:
+                # CRUCIAL : un simple `break` ne ferme PAS le générateur (il reste
+                # suspendu sur son yield), donc le flux HTTP vers Ollama resterait
+                # ouvert et le GPU continuerait à générer une réponse que personne
+                # ne lit. gen.close() propage GeneratorExit -> sortie du `with
+                # stream` -> fin TCP -> Ollama abandonne et libère le slot GPU.
+                gen.close()
 
             answer_text = "".join(answer_parts)
             timings.update(llm_stats)
@@ -1386,14 +1412,14 @@ def create_app(settings: Settings) -> FastAPI:
 
                 # ---- DOCUMENTS : retrieval local hybride ----
                 if not images:
+                    # droits NTFS : le filtrage est passé À retrieve_timed pour
+                    # s'appliquer AVANT la troncature (un utilisateur restreint
+                    # reçoit N extraits lisibles, pas « N moins les masqués »).
                     hits, timings = retrieve_timed(
                         question, history, settings, embedder, store,
                         bm25=state["bm25"], reranker=_get_reranker(),
+                        readable=ntfs.can_read if settings.ntfs_filter else None,
                     )
-                    # droits NTFS : masquer les extraits que cet utilisateur ne
-                    # peut pas lire sur le disque (l'index est partagé)
-                    if settings.ntfs_filter:
-                        hits, _removed = ntfs.filter_readable(hits)
                     sources = format_sources(hits)
                     yield _sse({"type": "sources", "sources": sources})
 
