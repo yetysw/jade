@@ -7,6 +7,7 @@ class AppStatus {
   final bool? llmOk;
   final int chunksIndexed;
   final LicenseInfo license;
+  final HealthInfo health;
 
   AppStatus({
     required this.username,
@@ -14,6 +15,7 @@ class AppStatus {
     required this.llmOk,
     required this.chunksIndexed,
     required this.license,
+    required this.health,
   });
 
   factory AppStatus.fromJson(Map<String, dynamic> j) => AppStatus(
@@ -23,6 +25,107 @@ class AppStatus {
         chunksIndexed: j['chunks_indexed'] ?? 0,
         license: LicenseInfo.fromJson(
             (j['license'] as Map<String, dynamic>?) ?? const {}),
+        health: HealthInfo.fromJson(
+            (j['health'] as Map<String, dynamic>?) ?? const {}),
+      );
+}
+
+/// État de santé du poste (miroir du bloc `health` de /api/status et de
+/// /api/health) — sert au bandeau d'alerte et au panneau de diagnostic.
+class HealthInfo {
+  final bool ok;
+  final bool? llmOk;
+  final String llmError;
+  final bool modelsReady;
+  final double diskFreeGb;
+  final bool diskLow;
+  final int chunksIndexed;
+  final bool indexing;
+
+  const HealthInfo({
+    required this.ok,
+    required this.llmOk,
+    required this.llmError,
+    required this.modelsReady,
+    required this.diskFreeGb,
+    required this.diskLow,
+    required this.chunksIndexed,
+    required this.indexing,
+  });
+
+  /// Vrai s'il faut afficher le bandeau rouge : un point de santé mérite
+  /// l'attention de l'utilisateur (LLM injoignable, modèles absents, disque bas).
+  bool get hasIssue => !ok;
+
+  /// Message court résumant le premier problème détecté (bandeau).
+  String get summary {
+    if (llmOk == false) {
+      return "Serveur d'IA injoignable — les réponses sont momentanément "
+          'indisponibles.';
+    }
+    if (!modelsReady) return 'Modèles de recherche non prêts.';
+    if (diskLow) {
+      return 'Espace disque faible (${diskFreeGb.toStringAsFixed(1)} Go libres).';
+    }
+    return 'Un composant nécessite votre attention.';
+  }
+
+  factory HealthInfo.fromJson(Map<String, dynamic> j) => HealthInfo(
+        ok: j['ok'] ?? true,
+        llmOk: j['llm_ok'],
+        llmError: j['llm_error'] ?? '',
+        modelsReady: j['models_ready'] ?? true,
+        diskFreeGb: (j['disk_free_gb'] ?? 0).toDouble(),
+        diskLow: j['disk_low'] ?? false,
+        chunksIndexed: j['chunks_indexed'] ?? 0,
+        indexing: j['indexing'] == true,
+      );
+}
+
+/// Identifiants de connexion aux services (miroir de /api/config), modifiables
+/// dans les réglages. Le secret Cloudflare n'est jamais transmis à l'interface :
+/// on sait seulement s'il est défini ([cfSecretSet]).
+class ConnConfig {
+  final String ollamaUrl;
+  final String searxngUrl;
+  final String cfClientId;
+  final bool cfSecretSet;
+
+  const ConnConfig({
+    required this.ollamaUrl,
+    required this.searxngUrl,
+    required this.cfClientId,
+    required this.cfSecretSet,
+  });
+
+  factory ConnConfig.fromJson(Map<String, dynamic> j) => ConnConfig(
+        ollamaUrl: j['ollama_url'] ?? '',
+        searxngUrl: j['searxng_url'] ?? '',
+        cfClientId: j['cf_client_id'] ?? '',
+        cfSecretSet: j['cf_secret_set'] == true,
+      );
+}
+
+/// État du premier lancement (miroir de /api/onboarding) : acceptation légale
+/// et parcours d'accueil.
+class OnboardingState {
+  final String legalVersion;
+  final bool legalAccepted;
+  final bool onboardingDone;
+  final bool configured;
+
+  const OnboardingState({
+    required this.legalVersion,
+    required this.legalAccepted,
+    required this.onboardingDone,
+    required this.configured,
+  });
+
+  factory OnboardingState.fromJson(Map<String, dynamic> j) => OnboardingState(
+        legalVersion: j['legal_version'] ?? '',
+        legalAccepted: j['legal_accepted'] == true,
+        onboardingDone: j['onboarding_done'] == true,
+        configured: j['configured'] == true,
       );
 }
 

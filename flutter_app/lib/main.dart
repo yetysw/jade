@@ -14,6 +14,7 @@ import 'backend.dart';
 import 'design.dart';
 import 'home.dart';
 import 'models.dart';
+import 'onboarding.dart';
 import 'tabler.dart';
 import 'theme.dart';
 
@@ -116,10 +117,25 @@ class _BootState extends State<_Boot> {
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
     if (!mounted) return;
+    // 3) premier lancement : acceptation légale + onboarding si nécessaire,
+    //    sinon on ouvre directement l'accueil.
+    OnboardingState? ob;
+    try {
+      ob = await _api.onboardingState();
+    } catch (_) {
+      // backend joignable mais endpoint indisponible : ne pas bloquer l'accès
+    }
+    if (!mounted) return;
+    final Widget destination;
+    if (ob != null && (!ob.legalAccepted || !ob.onboardingDone)) {
+      destination = FirstRunFlow(initial: ob);
+    } else {
+      destination = const HomeScreen();
+    }
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: context.motion(const Duration(milliseconds: 260)),
-        pageBuilder: (_, __, ___) => const HomeScreen(),
+        pageBuilder: (_, __, ___) => destination,
         transitionsBuilder: (_, anim, __, child) => FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
           child: child,

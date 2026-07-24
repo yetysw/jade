@@ -39,11 +39,18 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   IndexSettings? _settings;
+  HealthInfo? _health;
   bool _busy = false;
   String? _rootError;
   String _notice = '';
 
   final _pathCtl = TextEditingController();
+  final _restoreCtl = TextEditingController();
+  final _ollamaCtl = TextEditingController();
+  final _searxngCtl = TextEditingController();
+  final _cfIdCtl = TextEditingController();
+  final _cfSecretCtl = TextEditingController();
+  ConnConfig? _conn;
 
   @override
   void initState() {
@@ -54,6 +61,11 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void dispose() {
     _pathCtl.dispose();
+    _restoreCtl.dispose();
+    _ollamaCtl.dispose();
+    _searxngCtl.dispose();
+    _cfIdCtl.dispose();
+    _cfSecretCtl.dispose();
     super.dispose();
   }
 
@@ -62,6 +74,95 @@ class _SettingsViewState extends State<SettingsView> {
       final s = await widget.api.getSettings();
       if (mounted) setState(() => _settings = s);
     } catch (_) {}
+    try {
+      final h = await widget.api.health();
+      if (mounted) setState(() => _health = h);
+    } catch (_) {}
+    try {
+      final c = await widget.api.getConfig();
+      if (mounted) {
+        setState(() => _conn = c);
+        _ollamaCtl.text = c.ollamaUrl;
+        _searxngCtl.text = c.searxngUrl;
+        _cfIdCtl.text = c.cfClientId;
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveConfig() async {
+    setState(() => _busy = true);
+    try {
+      final res = await widget.api.setConfig(
+        ollamaUrl: _ollamaCtl.text.trim(),
+        searxngUrl: _searxngCtl.text.trim(),
+        cfClientId: _cfIdCtl.text.trim(),
+        cfSecret: _cfSecretCtl.text.trim(),
+      );
+      _cfSecretCtl.clear();
+      final ok = res['llm_ok'] == true;
+      if (!mounted) return;
+      setState(() => _notice = ok
+          ? 'Identifiants enregistrés — serveur d’IA joignable.'
+          : 'Identifiants enregistrés, mais le serveur d’IA reste injoignable : '
+              '${res['llm_error'] ?? 'vérifiez les valeurs'}.');
+      await _load();
+    } on ApiException catch (e) {
+      setState(() => _notice = 'Enregistrement impossible : ${e.message}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // ---------------------------------------------- sauvegarde / restauration
+
+  Future<void> _backup() async {
+    setState(() => _busy = true);
+    try {
+      final res = await widget.api.backupChats();
+      final path = (res['path'] ?? '').toString();
+      final n = res['conversations'] ?? 0;
+      if (!mounted) return;
+      setState(() => _notice =
+          '$n conversation(s) sauvegardée(s).\nFichier : $path');
+      // révèle le fichier dans l'Explorateur pour que l'utilisateur le récupère
+      if (path.isNotEmpty) {
+        try {
+          await widget.api.openFile(path, reveal: true);
+        } catch (_) {}
+      }
+    } on ApiException catch (e) {
+      setState(() => _notice = 'Sauvegarde impossible : ${e.message}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _restore() async {
+    final path = _restoreCtl.text.trim();
+    if (path.isEmpty) return;
+    final ok = await _confirm(
+      'Restaurer cette sauvegarde ?',
+      'Les conversations du fichier seront ajoutées à celles déjà présentes '
+          '(aucune conversation existante n’est supprimée).',
+      'Restaurer',
+      danger: false,
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      final res = await widget.api.restoreChats(path);
+      widget.onHistoryCleared(); // recharge la liste des conversations
+      if (!mounted) return;
+      setState(() {
+        _notice = '${res['conversations'] ?? 0} conversation(s) et '
+            '${res['folders'] ?? 0} dossier(s) restauré(s).';
+        _restoreCtl.clear();
+      });
+    } on ApiException catch (e) {
+      setState(() => _notice = 'Restauration impossible : ${e.message}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _addRoot() async {
@@ -145,7 +246,8 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  Future<bool?> _confirm(String title, String body, String confirmLabel) {
+  Future<bool?> _confirm(String title, String body, String confirmLabel,
+      {bool danger = true}) {
     final jade = context.jade;
     return showDialog<bool>(
       context: context,
@@ -159,7 +261,8 @@ class _SettingsViewState extends State<SettingsView> {
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Annuler')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: jade.danger),
+            style: FilledButton.styleFrom(
+                backgroundColor: danger ? jade.danger : jade.primary),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(confirmLabel),
           ),
@@ -213,7 +316,13 @@ class _SettingsViewState extends State<SettingsView> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_notice.isNotEmpty) _NoticeBar(_notice),
+                  _statusSection(context),
+                  const SizedBox(height: JadeSpace.xxl),
+                  _connSection(context),
+                  const SizedBox(height: JadeSpace.xxl),
                   _indexSection(context),
+                  const SizedBox(height: JadeSpace.xxl),
+                  _backupSection(context),
                   const SizedBox(height: JadeSpace.xxl),
                   _dataSection(context),
                 ],
@@ -389,6 +498,216 @@ class _SettingsViewState extends State<SettingsView> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------- section état système
+
+  Widget _statusSection(BuildContext context) {
+    final jade = context.jade;
+    final h = _health;
+    return _Card(
+      icon: TablerIcons.activity,
+      title: 'État du système',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (h == null)
+            Text('Diagnostic en cours…',
+                style: JadeType.caption.copyWith(color: jade.muted))
+          else ...[
+            _statusRow(
+              context,
+              "Serveur d'IA",
+              h.llmOk != false,
+              h.llmOk == false
+                  ? (h.llmError.isNotEmpty ? 'injoignable' : 'injoignable')
+                  : 'joignable',
+            ),
+            _statusRow(context, 'Modèles de recherche', h.modelsReady,
+                h.modelsReady ? 'prêts' : 'en préparation'),
+            _statusRow(context, 'Espace disque', !h.diskLow,
+                '${h.diskFreeGb.toStringAsFixed(1)} Go libres'),
+            _statusRow(context, 'Index documentaire', true,
+                '${h.chunksIndexed} extraits${h.indexing ? ' · indexation…' : ''}'),
+            if (h.llmOk == false && h.llmError.isNotEmpty) ...[
+              const SizedBox(height: JadeSpace.sm),
+              Text(h.llmError,
+                  style: JadeType.caption.copyWith(color: jade.muted, height: 1.5)),
+            ],
+          ],
+          const SizedBox(height: JadeSpace.md),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _busy ? null : _load,
+              icon: const Icon(TablerIcons.refresh, size: 15),
+              label: const Text('Actualiser'),
+              style: TextButton.styleFrom(foregroundColor: jade.muted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusRow(BuildContext context, String label, bool ok, String value) {
+    final jade = context.jade;
+    final color = ok ? jade.success : jade.danger;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: JadeSpace.sm),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: JadeSpace.md),
+          Expanded(
+            child: Text(label, style: JadeType.label.copyWith(color: jade.body)),
+          ),
+          Text(value,
+              style: JadeType.caption
+                  .merge(JadeType.tabular)
+                  .copyWith(color: ok ? jade.muted : jade.danger)),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------- section connexion aux services
+
+  Widget _connSection(BuildContext context) {
+    final jade = context.jade;
+    return _Card(
+      icon: TablerIcons.world,
+      title: 'Connexion aux services',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Adresses et identifiants Cloudflare Access fournis par Jade. '
+            'Le même couple Client ID / Secret sert au serveur d’IA et à la '
+            'recherche web. Modifiable sans réinstaller.',
+            style: JadeType.caption.copyWith(color: jade.muted, height: 1.5),
+          ),
+          const SizedBox(height: JadeSpace.md),
+          _field(context, 'Serveur d’IA (OLLAMA_URL)', _ollamaCtl,
+              hint: 'https://llm.example.com'),
+          const SizedBox(height: JadeSpace.md),
+          _field(context, 'Recherche web (SEARXNG_URL, facultatif)', _searxngCtl,
+              hint: 'https://search.example.com'),
+          const SizedBox(height: JadeSpace.md),
+          _field(context, 'Cloudflare Access — Client ID', _cfIdCtl),
+          const SizedBox(height: JadeSpace.md),
+          _field(
+            context,
+            'Cloudflare Access — Secret',
+            _cfSecretCtl,
+            obscure: true,
+            hint: _conn?.cfSecretSet == true
+                ? 'Défini — laisser vide pour conserver'
+                : 'Non défini',
+          ),
+          const SizedBox(height: JadeSpace.lg),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _saveConfig,
+              icon: const Icon(TablerIcons.circleCheck, size: 16),
+              label: const Text('Enregistrer et tester'),
+              style: FilledButton.styleFrom(
+                backgroundColor: jade.primary,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: JadeSpace.lg, vertical: JadeSpace.md),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field(BuildContext context, String label, TextEditingController ctl,
+      {String? hint, bool obscure = false}) {
+    final jade = context.jade;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: JadeType.caption.copyWith(color: jade.muted)),
+        const SizedBox(height: JadeSpace.xs + 2),
+        TextField(
+          controller: ctl,
+          obscureText: obscure,
+          decoration: _fieldDecoration(context, hint ?? ''),
+          style: JadeType.label.copyWith(color: jade.text),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------- section sauvegarde / migration
+
+  Widget _backupSection(BuildContext context) {
+    final jade = context.jade;
+    return _Card(
+      icon: TablerIcons.database,
+      title: 'Sauvegarde et migration',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Exportez vos conversations dans un fichier que vous conservez '
+            '(clé USB, dossier réseau) pour les restaurer sur un autre poste. '
+            'Ce fichier contient vos échanges en clair : gardez-le en lieu sûr.',
+            style: JadeType.caption.copyWith(color: jade.muted, height: 1.5),
+          ),
+          const SizedBox(height: JadeSpace.md),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _backup,
+              icon: const Icon(TablerIcons.download, size: 16),
+              label: const Text('Sauvegarder mes conversations'),
+              style: FilledButton.styleFrom(
+                backgroundColor: jade.primary,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: JadeSpace.lg, vertical: JadeSpace.md),
+              ),
+            ),
+          ),
+          const SizedBox(height: JadeSpace.lg),
+          Text('Restaurer depuis un fichier de sauvegarde (.jadebak) :',
+              style: JadeType.caption.copyWith(color: jade.muted)),
+          const SizedBox(height: JadeSpace.sm),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _restoreCtl,
+                  onSubmitted: (_) => _restore(),
+                  decoration: _fieldDecoration(
+                      context, r'Chemin complet du fichier .jadebak'),
+                  style: JadeType.label.copyWith(color: jade.text),
+                ),
+              ),
+              const SizedBox(width: JadeSpace.sm),
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _restore,
+                icon: const Icon(TablerIcons.upload, size: 16),
+                label: const Text('Restaurer'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: jade.primary,
+                  side: BorderSide(color: jade.borderStrong),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: JadeSpace.md, vertical: JadeSpace.md),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

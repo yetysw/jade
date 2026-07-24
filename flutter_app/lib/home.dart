@@ -47,12 +47,17 @@ class HomeScreenState extends State<HomeScreen> {
 
   String _search = '';
   Timer? _searchTimer;
+  Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
     _refresh();
     _checkUpdate();
+    // rafraîchit périodiquement le statut : le bandeau de santé (LLM injoignable,
+    // disque bas…) reflète l'état réel sans que l'utilisateur ait à recharger.
+    _statusTimer =
+        Timer.periodic(const Duration(seconds: 60), (_) => _refresh());
   }
 
   /// Vérifie discrètement s'il existe une mise à jour (jamais bloquant).
@@ -64,6 +69,7 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _searchTimer?.cancel();
+    _statusTimer?.cancel();
     api.close();
     super.dispose();
   }
@@ -793,6 +799,49 @@ class _LicenseBanner extends StatelessWidget {
   }
 }
 
+/// Bandeau rouge d'alerte système : affiché quand un point de santé mérite
+/// l'attention (serveur d'IA injoignable, modèles absents, disque bas). Un appui
+/// ouvre les réglages, où le panneau d'état détaille le diagnostic.
+class _HealthBanner extends StatelessWidget {
+  final HealthInfo info;
+  final VoidCallback onOpenSettings;
+  const _HealthBanner({required this.info, required this.onOpenSettings});
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: JadeRadius.all(JadeRadius.sm),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpenSettings,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: JadeSpace.md, vertical: JadeSpace.sm + 1),
+          decoration: BoxDecoration(
+            color: jade.danger.withValues(alpha: 0.12),
+            borderRadius: JadeRadius.all(JadeRadius.sm),
+            border: Border.all(color: jade.danger.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(TablerIcons.alertTriangle, size: 15, color: jade.danger),
+              const SizedBox(width: JadeSpace.sm),
+              Expanded(
+                child: Text(info.summary,
+                    style:
+                        JadeType.caption.copyWith(color: jade.body, height: 1.4)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Footer extends StatelessWidget {
   final HomeScreenState state;
   const _Footer({required this.state});
@@ -805,6 +854,11 @@ class _Footer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (state.status?.health.hasIssue == true) ...[
+            _HealthBanner(
+                info: state.status!.health, onOpenSettings: state.openSettings),
+            const SizedBox(height: JadeSpace.sm + 2),
+          ],
           if (state.status?.license.showBanner == true) ...[
             _LicenseBanner(info: state.status!.license),
             const SizedBox(height: JadeSpace.sm + 2),

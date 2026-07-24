@@ -315,6 +315,143 @@ class ChatStore:
             self._con.commit()
         return int(n)
 
+    # ----------------------------------------------- sauvegarde / migration
+
+    def export_all(self) -> dict:
+        """Exporte tout l'historique dans une structure PORTABLE (déchiffrée).
+
+        Le contenu en base est chiffré par DPAPI, clé liée au compte Windows
+        courant : une simple copie de chats.db ne se rouvrirait pas sur une autre
+        machine ou un autre compte. On exporte donc en clair (JSON) pour permettre
+        une vraie migration ; la restauration re-chiffre avec la clé de la machine
+        cible. Le fichier produit contient l'historique en clair : c'est à
+        l'utilisateur de le stocker en lieu sûr.
+
+        Returns:
+            dict: {folders: [...], conversations: [...]} où chaque conversation
+            porte ses métadonnées et la liste complète de ses messages déchiffrés.
+        """
+        with self._lock:
+            folders = [
+                {"id": r[0], "name": r[1], "created_at": r[2]}
+                for r in self._con.execute(
+                    "SELECT id, name, created_at FROM folders ORDER BY created_at"
+                ).fetchall()
+            ]
+            conv_rows = self._con.execute(
+                "SELECT id, title, created_at, updated_at, pinned, archived, folder_id "
+                "FROM conversations ORDER BY created_at"
+            ).fetchall()
+            conversations = []
+            for c in conv_rows:
+                msg_rows = self._con.execute(
+                    "SELECT role, content, sources, timings, attachments, created_at "
+                    "FROM messages WHERE conv_id = ? ORDER BY id",
+                    (c[0],),
+                ).fetchall()
+                conversations.append({
+                    "id": c[0],
+                    "title": _dec(c[1]),
+                    "created_at": c[2],
+                    "updated_at": c[3],
+                    "pinned": int(c[4]),
+                    "archived": int(c[5]),
+                    "folder_id": c[6],
+                    "messages": [
+                        {
+                            "role": m[0],
+                            "content": _dec(m[1]),
+                            "sources": json.loads(_dec(m[2])) if m[2] else None,
+                            "timings": json.loads(m[3]) if m[3] else None,
+                            "attachments": json.loads(_dec(m[4])) if m[4] else None,
+                            "created_at": m[5],
+                        }
+                        for m in msg_rows
+                    ],
+                })
+        return {"folders": folders, "conversations": conversations}
+
+    def import_all(self, data: dict) -> dict:
+        """Importe un export produit par [export_all], en re-chiffrant le contenu.
+
+        Fusion non destructive : les conversations et dossiers dont l'identifiant
+        existe déjà sont ignorés (aucune donnée existante n'est écrasée ni
+        supprimée). Convient à une migration vers une machine neuve comme à une
+        fusion partielle.
+
+        Args:
+            data: structure {folders, conversations} issue de [export_all].
+
+        Returns:
+            dict: {folders, conversations, messages} = nombres réellement insérés.
+
+        Raises:
+            ValueError: si `data` n'a pas la forme attendue.
+        """
+        if not isinstance(data, dict) or "conversations" not in data:
+            raise ValueError("Fichier de sauvegarde invalide.")
+        n_folders = n_convs = n_msgs = 0
+        with self._lock:
+            existing_folders = {
+                r[0] for r in self._con.execute("SELECT id FROM folders").fetchall()
+            }
+            for f in data.get("folders", []):
+                fid = f.get("id")
+                if not fid or fid in existing_folders:
+                    continue
+                self._con.execute(
+                    "INSERT INTO folders (id, name, created_at) VALUES (?, ?, ?)",
+                    (fid, str(f.get("name", ""))[:50], f.get("created_at") or _now()),
+                )
+                existing_folders.add(fid)
+                n_folders += 1
+
+            existing_convs = {
+                r[0] for r in self._con.execute("SELECT id FROM conversations").fetchall()
+            }
+            for c in data.get("conversations", []):
+                cid = c.get("id")
+                if not cid or cid in existing_convs:
+                    continue
+                # un dossier référencé mais absent -> conversation non classée
+                folder_id = c.get("folder_id")
+                if folder_id and folder_id not in existing_folders:
+                    folder_id = None
+                self._con.execute(
+                    "INSERT INTO conversations "
+                    "(id, title, created_at, updated_at, pinned, archived, folder_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        cid, _enc(str(c.get("title", DEFAULT_TITLE))[:60]),
+                        c.get("created_at") or _now(), c.get("updated_at") or _now(),
+                        int(c.get("pinned", 0)), int(c.get("archived", 0)), folder_id,
+                    ),
+                )
+                existing_convs.add(cid)
+                n_convs += 1
+                for m in c.get("messages", []):
+                    role = m.get("role")
+                    if role not in ("user", "assistant"):
+                        continue
+                    sources = m.get("sources")
+                    attachments = m.get("attachments")
+                    timings = m.get("timings")
+                    self._con.execute(
+                        "INSERT INTO messages "
+                        "(conv_id, role, content, sources, timings, attachments, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            cid, role, _enc(str(m.get("content", ""))),
+                            _enc(json.dumps(sources, ensure_ascii=False)) if sources else None,
+                            json.dumps(timings) if timings else None,
+                            _enc(json.dumps(attachments, ensure_ascii=False)) if attachments else None,
+                            m.get("created_at") or _now(),
+                        ),
+                    )
+                    n_msgs += 1
+            self._con.commit()
+        return {"folders": n_folders, "conversations": n_convs, "messages": n_msgs}
+
     def history(self, cid: str, limit: int = 8) -> list[dict]:
         """Derniers messages (role/content) pour le contexte multi-tours."""
         with self._lock:
