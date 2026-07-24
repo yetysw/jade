@@ -1,6 +1,5 @@
-/// Réglages : dossiers à indexer (admin, protégé par mot de passe), état de
-/// l'index, réindexation, et suppression des données de l'utilisateur
-/// (historique de conversations, mémoire).
+/// Réglages : dossiers à indexer, état de l'index, réindexation, et
+/// suppression des données de l'utilisateur (historique, mémoire).
 library;
 
 import 'package:flutter/material.dart';
@@ -38,16 +37,11 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   IndexSettings? _settings;
-  bool _unlocked = false;
   bool _busy = false;
-  String? _pwdError;
   String? _rootError;
   String _notice = '';
 
-  final _pwdCtl = TextEditingController();
   final _pathCtl = TextEditingController();
-
-  String get _pwd => _pwdCtl.text;
 
   @override
   void initState() {
@@ -57,7 +51,6 @@ class _SettingsViewState extends State<SettingsView> {
 
   @override
   void dispose() {
-    _pwdCtl.dispose();
     _pathCtl.dispose();
     super.dispose();
   }
@@ -69,24 +62,6 @@ class _SettingsViewState extends State<SettingsView> {
     } catch (_) {}
   }
 
-  Future<void> _unlock() async {
-    setState(() {
-      _busy = true;
-      _pwdError = null;
-    });
-    try {
-      final ok = await widget.api.unlockSettings(_pwd);
-      setState(() {
-        _unlocked = ok;
-        _pwdError = ok ? null : 'Mot de passe incorrect.';
-      });
-    } catch (e) {
-      setState(() => _pwdError = '$e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _addRoot() async {
     final path = _pathCtl.text.trim();
     if (path.isEmpty) return;
@@ -95,7 +70,7 @@ class _SettingsViewState extends State<SettingsView> {
       _rootError = null;
     });
     try {
-      final s = await widget.api.addRoot(_pwd, path);
+      final s = await widget.api.addRoot(path);
       setState(() {
         _settings = s;
         _pathCtl.clear();
@@ -110,7 +85,7 @@ class _SettingsViewState extends State<SettingsView> {
   Future<void> _removeRoot(String path) async {
     setState(() => _busy = true);
     try {
-      final s = await widget.api.removeRoot(_pwd, path);
+      final s = await widget.api.removeRoot(path);
       setState(() => _settings = s);
     } catch (_) {
     } finally {
@@ -121,7 +96,7 @@ class _SettingsViewState extends State<SettingsView> {
   Future<void> _reindex({bool full = false}) async {
     setState(() => _busy = true);
     try {
-      await widget.api.reindex(_pwd, full: full);
+      await widget.api.reindex(full: full);
       setState(() => _notice = full
           ? 'Réindexation complète lancée en arrière-plan.'
           : 'Réindexation lancée en arrière-plan.');
@@ -252,52 +227,7 @@ class _SettingsViewState extends State<SettingsView> {
     return _Card(
       icon: TablerIcons.folder,
       title: 'Dossiers indexés',
-      subtitle: 'Administrateur',
-      child: !_unlocked ? _lockGate(context) : _rootsEditor(context),
-    );
-  }
-
-  Widget _lockGate(BuildContext context) {
-    final jade = context.jade;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'La configuration de l’indexation est protégée par le mot de passe '
-          'administrateur.',
-          style: JadeType.label.copyWith(color: jade.muted, height: 1.5),
-        ),
-        const SizedBox(height: JadeSpace.md),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _pwdCtl,
-                obscureText: true,
-                onSubmitted: (_) => _unlock(),
-                decoration: _fieldDecoration(context, 'Mot de passe'),
-                style: JadeType.label.copyWith(color: jade.text),
-              ),
-            ),
-            const SizedBox(width: JadeSpace.sm),
-            FilledButton(
-              onPressed: _busy ? null : _unlock,
-              style: FilledButton.styleFrom(
-                backgroundColor: jade.primary,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: JadeSpace.lg, vertical: JadeSpace.md),
-              ),
-              child: const Text('Déverrouiller'),
-            ),
-          ],
-        ),
-        if (_pwdError != null)
-          Padding(
-            padding: const EdgeInsets.only(top: JadeSpace.sm),
-            child: Text(_pwdError!,
-                style: JadeType.caption.copyWith(color: jade.danger)),
-          ),
-      ],
+      child: _rootsEditor(context),
     );
   }
 
@@ -514,13 +444,8 @@ class _SettingsViewState extends State<SettingsView> {
 class _Card extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String? subtitle;
   final Widget child;
-  const _Card(
-      {required this.icon,
-      required this.title,
-      this.subtitle,
-      required this.child});
+  const _Card({required this.icon, required this.title, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -540,19 +465,6 @@ class _Card extends StatelessWidget {
               Icon(icon, size: 16, color: jade.body),
               const SizedBox(width: JadeSpace.sm),
               Text(title, style: JadeType.subtitle.copyWith(color: jade.text)),
-              if (subtitle != null) ...[
-                const SizedBox(width: JadeSpace.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: JadeSpace.sm, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: jade.tile,
-                    borderRadius: JadeRadius.all(JadeRadius.pill),
-                  ),
-                  child: Text(subtitle!,
-                      style: JadeType.caption.copyWith(color: jade.muted)),
-                ),
-              ],
             ],
           ),
           const SizedBox(height: JadeSpace.lg),

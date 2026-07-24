@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'chat.dart';
 import 'design.dart';
+import 'feedback.dart';
 import 'main.dart';
 import 'models.dart';
 import 'settings.dart';
@@ -301,6 +302,11 @@ class _Sidebar extends StatelessWidget {
                 const SizedBox(width: JadeSpace.md),
                 Text('Jade', style: JadeType.title.copyWith(color: jade.text)),
                 const Spacer(),
+                _HeaderIcon(
+                  icon: TablerIcons.send,
+                  tooltip: 'Donner mon avis',
+                  onTap: () => showFeedbackDialog(context, state.api),
+                ),
                 _HeaderIcon(
                   icon: TablerIcons.settings,
                   tooltip: 'Réglages',

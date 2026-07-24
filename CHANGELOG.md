@@ -7,6 +7,22 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.5.0 — 🚧 dev : ⭐ Retours utilisateur + réglages simplifiés
+
+- ⭐ **Bouton « Donner mon avis »** (barre latérale) : le message part
+  directement à `feedback@example.com` via l'**API Resend** (clé saisie à
+  l'installation), avec nom d'utilisateur, version et client en pied de message.
+  Sans clé configurée : repli sur le client mail local. Endpoint
+  `POST /api/feedback` inchangé côté nom.
+- **Réglages sans mot de passe** : la gestion des dossiers indexés,
+  la réindexation et le sélecteur ne sont plus protégés par mot de passe
+  (`SETTINGS_PASSWORD` supprimé). L'API reste limitée à `127.0.0.1`.
+- **Installateur simplifié** : un **seul couple** Cloudflare Access
+  (Client ID/Secret) saisi une fois et réutilisé pour le LLM **et** SearXNG ;
+  champ **clé API Resend** ajouté ; champ mot de passe administrateur supprimé.
+
+---
+
 ## 1.4.3 — Correctif : installateur interactif (« app constant »)
 
 - **L'installateur 1.4.0–1.4.2 plantait au lancement en mode interactif**

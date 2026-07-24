@@ -115,32 +115,23 @@ class ApiClient {
   Future<IndexSettings> getSettings() async =>
       IndexSettings.fromJson(await _json('GET', '/api/settings'));
 
-  /// Vérifie le mot de passe admin. true si correct, false si refusé (403).
-  Future<bool> unlockSettings(String password) async {
-    try {
-      await _json('POST', '/api/settings/unlock',
-          {'password': password, 'full': false});
-      return true;
-    } on ApiException catch (e) {
-      if (e.status == 403) return false;
-      rethrow;
-    }
-  }
-
-  Future<IndexSettings> addRoot(String password, String path) async {
-    await _json('POST', '/api/settings/roots',
-        {'password': password, 'action': 'add', 'path': path});
+  Future<IndexSettings> addRoot(String path) async {
+    await _json('POST', '/api/settings/roots', {'action': 'add', 'path': path});
     return getSettings();
   }
 
-  Future<IndexSettings> removeRoot(String password, String path) async {
-    await _json('POST', '/api/settings/roots',
-        {'password': password, 'action': 'remove', 'path': path});
+  Future<IndexSettings> removeRoot(String path) async {
+    await _json(
+        'POST', '/api/settings/roots', {'action': 'remove', 'path': path});
     return getSettings();
   }
 
-  Future<void> reindex(String password, {bool full = false}) => _json(
-      'POST', '/api/settings/reindex', {'password': password, 'full': full});
+  Future<void> reindex({bool full = false}) =>
+      _json('POST', '/api/settings/reindex', {'full': full});
+
+  /// Envoie un retour utilisateur à Jade (e-mail via le backend).
+  Future<void> sendFeedback(String content) =>
+      _json('POST', '/api/feedback', {'content': content});
 
   /// Supprime tout l'historique de conversations. Retourne le nombre supprimé.
   Future<int> clearConversations() async {

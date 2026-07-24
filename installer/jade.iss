@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.4.3"
+#define AppVersion "1.5.0"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -137,23 +137,23 @@ end;
 procedure InitializeWizard;
 begin
   LlmPage := CreateInputQueryPage(wpSelectDir,
-    'Serveur IA Jade',
-    'Identifiants d''acces au serveur d''inference',
-    'Ces informations sont fournies par Jade. Elles sont enregistrees uniquement ' +
-    'sur ce poste et ne sont jamais incluses dans le programme d''installation.');
+    'Acces aux services Jade',
+    'Identifiants Cloudflare Access (uniques pour tous les services)',
+    'Ces informations sont fournies par Jade. Le meme couple Client ID / Secret ' +
+    'sert pour le serveur IA et la recherche web. Elles sont enregistrees ' +
+    'uniquement sur ce poste, jamais incluses dans le programme d''installation.');
   LlmPage.Add('Adresse du serveur LLM (OLLAMA_URL) :', False);
   LlmPage.Add('Cloudflare Access - Client ID :', False);
   LlmPage.Add('Cloudflare Access - Client Secret :', True);
   LlmPage.Values[0] := 'https://llm.example.com';
 
   WebPage := CreateInputQueryPage(LlmPage.ID,
-    'Recherche web et administration',
-    'Recherche web interne (facultatif) et mot de passe administrateur',
-    'Laisser les champs SearXNG vides si la recherche web interne n''est pas utilisee.');
+    'Recherche web et retours utilisateur',
+    'Recherche web interne et envoi des retours a Jade',
+    'Laisser vide un champ non utilise : la fonctionnalite correspondante sera ' +
+    'simplement desactivee.');
   WebPage.Add('Adresse SearXNG (SEARXNG_URL) :', False);
-  WebPage.Add('SearXNG - Client ID :', False);
-  WebPage.Add('SearXNG - Client Secret :', True);
-  WebPage.Add('Mot de passe administrateur (reglages) :', True);
+  WebPage.Add('Cle API Resend (retours utilisateur) :', True);
   WebPage.Values[0] := 'https://search.example.com';
 end;
 
@@ -166,14 +166,6 @@ begin
     if Trim(LlmPage.Values[0]) = '' then
     begin
       MsgBox('L''adresse du serveur LLM est requise.', mbError, MB_OK);
-      Result := False;
-    end;
-  end
-  else if CurPageID = WebPage.ID then
-  begin
-    if Trim(WebPage.Values[3]) = '' then
-    begin
-      MsgBox('Le mot de passe administrateur est requis.', mbError, MB_OK);
       Result := False;
     end;
   end;
@@ -225,9 +217,11 @@ begin
 #endif
     'WEB_FALLBACK=1' + NL +
     'SEARXNG_URL=' + Trim(WebPage.Values[0]) + NL +
-    'SEARXNG_CF_ACCESS_CLIENT_ID=' + Trim(WebPage.Values[1]) + NL +
-    'SEARXNG_CF_ACCESS_CLIENT_SECRET=' + Trim(WebPage.Values[2]) + NL +
-    'SETTINGS_PASSWORD=' + WebPage.Values[3] + NL;
+    { meme service token Cloudflare Access pour tous les services Jade }
+    'SEARXNG_CF_ACCESS_CLIENT_ID=' + Trim(LlmPage.Values[1]) + NL +
+    'SEARXNG_CF_ACCESS_CLIENT_SECRET=' + Trim(LlmPage.Values[2]) + NL +
+    'FEEDBACK_EMAIL=feedback@example.com' + NL +
+    'RESEND_API_KEY=' + Trim(WebPage.Values[1]) + NL;
   { le backend (PyInstaller) lit le .env à côté de son exécutable }
   SaveStringToFile(ExpandConstant('{app}\backend\.env'), S, False);
 end;

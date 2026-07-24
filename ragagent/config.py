@@ -84,9 +84,12 @@ class Settings:
     hybrid_enabled: bool
     rerank_enabled: bool
     rerank_model: str
-    settings_password: str
     ntfs_filter: bool
     cpu_threads: int
+    # Retour utilisateur : envoi par e-mail via l'API Resend (resend.com).
+    # Clé saisie à l'installation ; vide = repli sur le client mail local.
+    resend_api_key: str
+    resend_from: str  # expéditeur (domaine vérifié dans Resend)
     # Mises à jour (releases Gitea) — voir updater.py
     update_enabled: bool
     update_mode: str  # "manual" (poste client, bouton) | "scheduled" (RDS, tâche)
@@ -194,10 +197,9 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         # Désactivable sur poste très contraint (RERANK_ENABLED=0).
         rerank_enabled=get("RERANK_ENABLED", "1") not in ("0", "false", ""),
         rerank_model=get("RERANK_MODEL", "jinaai/jina-reranker-v2-base-multilingual"),
-        # AUCUN defaut : le mot de passe admin est defini a l'installation
-        # (assistant) ou via .env. Vide = reglages d'indexation verrouilles.
-        settings_password=get("SETTINGS_PASSWORD", ""),
         ntfs_filter=get("NTFS_FILTER", "1") not in ("0", "false", ""),
+        resend_api_key=get("RESEND_API_KEY", ""),
+        resend_from=get("RESEND_FROM", "Jade <jade@example.com>"),
         # threads ONNX (embeddings/reranker) : borné pour ne pas monopoliser le
         # CPU d'un serveur RDS partagé
         cpu_threads=int(get("CPU_THREADS", "2")),
