@@ -1,6 +1,7 @@
-/// Retour utilisateur : petit dialogue qui envoie un message à Jade
-/// (feedback@example.com) via le backend (API Resend). L'utilisateur écrit, envoie,
-/// c'est parti — aucun client mail requis.
+/// Retour utilisateur : petit dialogue qui prépare un e-mail vers Jade
+/// (feedback@example.com) dans le client mail par défaut du poste — Windows, macOS ou
+/// Linux — avec l'objet et le message pré-remplis, et un zip de diagnostic
+/// (journaux, version) révélé dans l'explorateur, à glisser dans le message.
 library;
 
 import 'package:flutter/material.dart';
@@ -52,8 +53,8 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
       if (mounted) {
-        setState(() =>
-            _error = 'Envoi impossible pour le moment — réessayez plus tard.');
+        setState(() => _error =
+            'Impossible d’ouvrir le client e-mail — réessayez plus tard.');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -97,7 +98,7 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(TablerIcons.send, size: 15),
-                label: const Text('Envoyer'),
+                label: const Text('Préparer l’e-mail'),
               ),
             ],
     );
@@ -109,8 +110,9 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Un problème, une idée, une remarque ? Votre message part '
-          'directement à l’équipe Jade.',
+          'Un problème, une idée, une remarque ? Votre client e-mail va '
+          's’ouvrir, prêt à envoyer à l’équipe Jade — avec un fichier de '
+          'diagnostic (journaux, version) à joindre au message.',
           style: JadeType.label.copyWith(color: jade.muted, height: 1.5),
         ),
         const SizedBox(height: JadeSpace.md),
@@ -155,7 +157,9 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
         const SizedBox(width: JadeSpace.md),
         Expanded(
           child: Text(
-            'Merci ! Votre retour a bien été envoyé à l’équipe Jade.',
+            'Votre client e-mail est ouvert avec le message pré-rempli. '
+            'Glissez-y le fichier de diagnostic affiché dans l’explorateur, '
+            'puis envoyez — merci !',
             style: JadeType.label.copyWith(color: jade.body, height: 1.5),
           ),
         ),

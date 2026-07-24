@@ -5,7 +5,7 @@
 
   **Assistant documentaire d'entreprise, « local d'abord »**
 
-  ![Version](https://img.shields.io/badge/version-1.5.0-00357F)
+  ![Version](https://img.shields.io/badge/version-1.6.0-00357F)
   ![Plateforme](https://img.shields.io/badge/Windows-10%2F11-informational)
   ![UI](https://img.shields.io/badge/interface-Flutter%20native-blue)
   ![Licence](https://img.shields.io/badge/licence-Jade%20S%C3%A0rl-lightgrey)
@@ -73,10 +73,13 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 - **Réglages** : dossiers à indexer, réindexation, suppression de tout
   l'historique. **Sans dossier indexé**, Jade répond comme un assistant général
   (web + connaissances).
-- **Retour utilisateur** : bouton « Donner mon avis » — le message part
-  directement à `feedback@example.com` (API Resend), sans client mail.
+- **Retour utilisateur** : bouton « Donner mon avis » — ouvre le client e-mail
+  par défaut du poste (Windows/macOS/Linux) pré-rempli vers `feedback@example.com`, et
+  prépare un **zip de diagnostic** (journaux, version — sans secret) à joindre.
 - **Sécurité** : chiffrement au repos (conversations DPAPI, index EFS),
-  filtrage des droits NTFS par utilisateur au moment de la recherche.
+  filtrage des droits NTFS par utilisateur, **backend isolé par session RDS**
+  (port dédié), secrets du `.env` **scellés (DPAPI machine) + ACL restreinte**,
+  garde anti-DNS-rebinding sur l'API locale.
 - **Confort** : mode incognito, thème clair / sombre / **auto**, multi-utilisateur
   (conversations isolées par session), interface française.
 - **Mises à jour** : détection automatique de la dernière version publiée sur
@@ -94,13 +97,13 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 
 ## Installation (poste client)
 
-Utiliser l'installateur `Jade-Setup-1.5.0.exe` (voir *Build* plus bas).
+Utiliser l'installateur `Jade-Setup-1.6.0.exe` (voir *Build* plus bas).
 **Aucun secret n'est embarqué dans l'installateur** : pendant l'installation,
 l'assistant demande les **identifiants d'accès Jade** (adresse du serveur LLM,
 jetons Cloudflare Access — un seul couple pour tous les services — éventuel
-SearXNG, clé Resend pour les retours utilisateur).
-Ils sont écrits dans un fichier `.env` **local au poste** — rien ne sort, rien
-n'est distribué avec l'exe.
+SearXNG). Ils sont écrits dans un `.env` **local au poste**, dont les **secrets
+sont scellés (DPAPI machine)** et l'**ACL restreinte aux administrateurs** —
+rien ne sort, rien n'est distribué avec l'exe.
 
 - Installe l'application dans `C:\Program Files\Jade`.
 - Pose l'index partagé, les journaux et le cache de modèles dans

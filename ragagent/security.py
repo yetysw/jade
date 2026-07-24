@@ -22,7 +22,9 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 DPAPI_PREFIX = "dpapi:"
+DPAPI_MACHINE_PREFIX = "dpapi-m:"
 _WINDOWS = sys.platform == "win32"
+_CRYPTPROTECT_LOCAL_MACHINE = 0x4  # clé liée à la MACHINE (tous les comptes)
 
 if _WINDOWS:
     import ctypes
@@ -62,12 +64,39 @@ def protect(text: str) -> str:
     return DPAPI_PREFIX + base64.b64encode(out).decode("ascii")
 
 
+def protect_machine(text: str) -> str:
+    """Chiffre une chaîne avec DPAPI **à l'échelle machine** (déchiffrable par
+    tout processus de CETTE machine, aucun autre poste). Sert à sceller les
+    secrets du .env : nécessaire sur RDS où chaque session utilisateur doit
+    pouvoir les lire, tout en rendant le fichier inutilisable s'il est copié
+    hors du serveur (sauvegarde, partage, exfiltration du fichier seul)."""
+    if not _WINDOWS:
+        raise OSError("DPAPI indisponible (Windows uniquement)")
+    blob_in = _blob(text.encode("utf-8"))
+    blob_out = _DATA_BLOB()
+    if not ctypes.windll.crypt32.CryptProtectData(
+        ctypes.byref(blob_in), None, None, None, None,
+        _CRYPTPROTECT_LOCAL_MACHINE, ctypes.byref(blob_out)
+    ):
+        raise OSError("CryptProtectData (machine) a échoué")
+    out = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+    return DPAPI_MACHINE_PREFIX + base64.b64encode(out).decode("ascii")
+
+
 def unprotect(value: str) -> str:
-    """Déchiffre une valeur 'dpapi:<base64>'. Une valeur sans préfixe est
-    renvoyée telle quelle (rétro-compatibilité avec des données en clair)."""
-    if not value.startswith(DPAPI_PREFIX) or not _WINDOWS:
+    """Déchiffre une valeur 'dpapi:<base64>' ou 'dpapi-m:<base64>' (le champ
+    machine/utilisateur est encodé dans le blob, l'API est la même). Une valeur
+    sans préfixe est renvoyée telle quelle (rétro-compat données en clair)."""
+    if value.startswith(DPAPI_MACHINE_PREFIX):
+        prefix = DPAPI_MACHINE_PREFIX
+    elif value.startswith(DPAPI_PREFIX):
+        prefix = DPAPI_PREFIX
+    else:
         return value
-    data = base64.b64decode(value[len(DPAPI_PREFIX):])
+    if not _WINDOWS:
+        return value
+    data = base64.b64decode(value[len(prefix):])
     blob_in = _blob(data)
     blob_out = _DATA_BLOB()
     if not ctypes.windll.crypt32.CryptUnprotectData(

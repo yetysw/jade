@@ -12,12 +12,16 @@ import 'package:http/http.dart' as http;
 
 import 'models.dart';
 
-const kBackendBase = 'http://127.0.0.1:8765';
+/// Base de l'API du backend local. Le port est **dynamique par session**
+/// (isolation RDS) : BackendManager le découvre via le fichier
+/// `%LOCALAPPDATA%\Jade\backend.json` au démarrage et met cette valeur à jour
+/// avant l'ouverture de l'interface. 8765 = repli développement.
+String backendBase = 'http://127.0.0.1:8765';
 
 class ApiClient {
   final http.Client _client = http.Client();
 
-  Uri _u(String path) => Uri.parse('$kBackendBase$path');
+  Uri _u(String path) => Uri.parse('$backendBase$path');
 
   Future<dynamic> _json(String method, String path, [Object? body]) async {
     final req = http.Request(method, _u(path));

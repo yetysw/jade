@@ -47,13 +47,16 @@ def main() -> int:
     _setup_logging(settings)
     log = logging.getLogger("jade")
     try:
-        import uvicorn
+        # Route via la CLI : « Jade.exe » = serve (port auto + fichier de
+        # découverte, isolation par session RDS) ; « Jade.exe seal-env » =
+        # scellement des secrets du .env (lancé par l'installateur).
+        from ragagent.cli import main as cli_main
 
-        from ragagent.web.app import create_app
-
-        uvicorn.run(create_app(settings), host=settings.ui_host,
-                    port=settings.ui_port, log_level="warning")
-        return 0
+        argv = sys.argv[1:] or ["serve"]
+        if argv == ["serve"] or argv == ["seal-env"]:
+            return cli_main(argv)
+        log.warning("Argument inconnu %s — démarrage du backend", argv)
+        return cli_main(["serve"])
     except Exception:
         log.exception("Démarrage de Jade échoué")
         return 1

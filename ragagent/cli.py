@@ -32,6 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("serve", help="Lance le backend local (localhost uniquement) ; "
                                  "l'interface est l'application native (flutter_app/)")
 
+    sub.add_parser("seal-env", help="Scelle les secrets du .env (DPAPI machine) — "
+                                    "lance par l'installateur, idempotent")
+
     args = parser.parse_args(argv)
     # Console Windows souvent en cp1252 : force UTF-8 pour ne jamais crasher
     # sur un caractere exotique (ex. pages d'erreur Cloudflare)
@@ -58,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ask(settings, args.question, args.dry_run, args.json)
     if args.command == "serve":
         return _cmd_serve(settings)
+    if args.command == "seal-env":
+        return _cmd_seal_env(args.env)
     return 2
 
 
@@ -156,6 +161,100 @@ def _cmd_ask(settings, question: str, dry_run: bool, as_json: bool) -> int:
     return 0
 
 
+# Clés du .env scellées par « seal-env » (DPAPI machine). Les autres valeurs
+# (URLs, réglages) restent lisibles : seuls les secrets sont chiffrés.
+_SECRET_KEYS = (
+    "CF_ACCESS_CLIENT_SECRET",
+    "SEARXNG_CF_ACCESS_CLIENT_SECRET",
+    "GITEA_TOKEN",
+    "SETUP_PASSWORD",
+)
+
+
+def _cmd_seal_env(env_file: str | None) -> int:
+    """Chiffre (DPAPI machine) les valeurs secrètes du .env, en place.
+
+    Lancé par l'installateur (contexte élevé, Program Files inscriptible).
+    Idempotent : une valeur déjà scellée ou vide est laissée telle quelle.
+    Hors Windows / DPAPI absent : no-op propre."""
+    from .config import PROJECT_ROOT
+    from .security import DPAPI_MACHINE_PREFIX, protect_machine
+
+    path = _path_of(env_file) or PROJECT_ROOT / ".env"
+    if not path.exists():
+        print(f"seal-env : aucun fichier {path} — rien a faire")
+        return 0
+    if sys.platform != "win32":
+        print("seal-env : DPAPI indisponible (hors Windows) — fichier laisse en clair")
+        return 0
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raw = path.read_text(encoding="cp1252")
+    out, sealed = [], 0
+    for line in raw.splitlines():
+        stripped = line.strip()
+        key, _, value = stripped.partition("=")
+        if (
+            not stripped.startswith("#") and key.strip() in _SECRET_KEYS
+            and value and not value.startswith(DPAPI_MACHINE_PREFIX)
+        ):
+            try:
+                line = f"{key.strip()}={protect_machine(value)}"
+                sealed += 1
+            except OSError as e:
+                print(f"seal-env : echec sur {key.strip()} ({e}) — laisse en clair")
+        out.append(line)
+    if sealed:
+        path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    print(f"seal-env : {sealed} secret(s) scelle(s) dans {path}")
+    return 0
+
+
+def _path_of(value: str | None):
+    from pathlib import Path
+
+    return Path(value) if value else None
+
+
+def _free_port() -> int:
+    """Choisit un port libre sur 127.0.0.1 (fenêtre minuscule de course :
+    acceptable en local, le bind uvicorn échouerait bruyamment sinon)."""
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _write_discovery(settings, port: int) -> None:
+    """Publie le port du backend de CETTE session dans %LOCALAPPDATA%\\Jade —
+    par utilisateur, donc chaque session RDS voit uniquement le sien."""
+    import os
+
+    info = {"port": port, "pid": os.getpid()}
+    path = settings.user_data_dir / "backend.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(info), encoding="utf-8")
+
+
+def _already_running(settings) -> int | None:
+    """Port d'un backend déjà vivant pour CET utilisateur, sinon None."""
+    import httpx
+
+    path = settings.user_data_dir / "backend.json"
+    if not path.exists():
+        return None
+    try:
+        port = int(json.loads(path.read_text(encoding="utf-8"))["port"])
+        r = httpx.get(f"http://127.0.0.1:{port}/api/status", timeout=2.0)
+        if r.status_code == 200 and r.json().get("app_name") == "Jade":
+            return port
+    except Exception:
+        pass
+    return None
+
+
 def _cmd_serve(settings) -> int:
     import uvicorn
 
@@ -166,12 +265,22 @@ def _cmd_serve(settings) -> int:
             file=sys.stderr,
         )
         return 1
+
+    port = settings.ui_port
+    if port == 0:  # UI_PORT=auto : un backend PAR session (isolation RDS)
+        existing = _already_running(settings)
+        if existing:
+            print(f"* Backend deja en cours pour cette session (port {existing})")
+            return 0
+        port = _free_port()
+
     from .web.app import create_app
 
     app = create_app(settings)
-    print(f"* Backend local (API) : http://{settings.ui_host}:{settings.ui_port} "
+    _write_discovery(settings, port)
+    print(f"* Backend local (API) : http://{settings.ui_host}:{port} "
           "— interface : application native (flutter_app/)")
-    uvicorn.run(app, host=settings.ui_host, port=settings.ui_port, log_level="warning")
+    uvicorn.run(app, host=settings.ui_host, port=port, log_level="warning")
     return 0
 
 
