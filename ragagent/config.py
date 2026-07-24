@@ -18,7 +18,7 @@ from platformdirs import user_data_dir as _user_data_dir
 os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "30")
 
 # Clé publique Ed25519 par défaut pour vérifier les JWT de licence (hors ligne).
-# ⚠️ Clé de DÉV. En production, générer la paire sur le serveur de licences
+# ATTENTION : clé de DÉV. En production, générer la paire sur le serveur de licences
 # (`python -m licsrv.keys`) et remplacer cette valeur (ou la fournir via
 # LICENSE_PUBLIC_KEY dans le .env). La clé privée correspondante ne doit JAMAIS
 # être versionnée ni distribuée.

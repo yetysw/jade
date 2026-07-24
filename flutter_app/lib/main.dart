@@ -22,9 +22,13 @@ void main() {
   runApp(const JadeApp());
 }
 
+/// Racine de l'application : construit le [MaterialApp], applique le theme Jade
+/// (clair / sombre / auto) et heberge l'ecran principal.
 class JadeApp extends StatefulWidget {
   const JadeApp({super.key});
 
+  /// Retrouve l'etat racine depuis un [BuildContext] descendant (ex. bascule
+  /// du mode de theme).
   static JadeAppState of(BuildContext context) =>
       context.findAncestorStateOfType<JadeAppState>()!;
 
@@ -32,6 +36,7 @@ class JadeApp extends StatefulWidget {
   State<JadeApp> createState() => JadeAppState();
 }
 
+/// Etat de [JadeApp] : conserve le [ThemeMode] courant et le rafraichit.
 class JadeAppState extends State<JadeApp> {
   ThemeMode _mode = ThemeMode.system;
 

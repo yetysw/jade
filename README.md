@@ -17,7 +17,7 @@ l'extérieur** : seuls la question et de courts extraits de texte transitent, en
 HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 + Access).
 
-> 🔐 **Aucun secret dans ce dépôt.** Les identifiants (jetons Cloudflare, mots de
+> **Aucun secret dans ce dépôt.** Les identifiants (jetons Cloudflare, mots de
 > passe) sont saisis par le technicien pendant l'installation, ou renseignés dans
 > un `.env` local en développement (voir `.env.example`).
 
@@ -25,21 +25,15 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 
 ## Comment ça fonctionne
 
-```
-┌─────────────────── Poste / serveur RDS du client ───────────────────┐
-│                                                                      │
-│   Application native (Flutter Windows)   ← flutter_app/              │
-│        │  interface : conversations, streaming, sources, fichiers    │
-│        ▼  HTTP + SSE, en local uniquement                            │
-│   Backend local (FastAPI)  ── 127.0.0.1:8765 ──  ragagent/          │
-│     • indexation locale (ChromaDB + fastembed CPU, BM25)             │
-│     • recherche hybride + reranking     • création de fichiers       │
-│     • mémoire locale     • conversations chiffrées     • accès NTFS   │
-│                                                                      │
-└───────────┬──────────────────────────────────────────┬─────────────┘
-   question +│  HTTPS + Cloudflare Access (service token) │ question seule
-   extraits  ▼                                            ▼
-      llm.example.com (Ollama / AI01, RTX 2000 Ada)     search.example.com
+```mermaid
+flowchart TB
+    subgraph poste["Poste / serveur RDS du client"]
+        ui["Application native (Flutter Windows) — flutter_app/<br/>conversations, streaming, sources, fichiers"]
+        be["Backend local (FastAPI) — 127.0.0.1 — ragagent/<br/>indexation locale (ChromaDB + fastembed CPU, BM25)<br/>recherche hybride + reranking, création de fichiers<br/>mémoire locale, conversations chiffrées, accès NTFS"]
+        ui -->|"HTTP + SSE (local uniquement)"| be
+    end
+    be -->|"HTTPS + Cloudflare Access (service token)<br/>question + extraits"| llm["llm.example.com<br/>Ollama / AI01 (RTX 2000 Ada)"]
+    be -->|"HTTPS — question seule"| searxng["search.example.com"]
 ```
 
 - **Interface et backend sont séparés.** L'application **Flutter native**
@@ -85,6 +79,26 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 - **Mises à jour** : détection automatique de la dernière version publiée sur
   Gitea. Sur poste client, un **bouton** propose de télécharger et installer ;
   sur serveur RDS, une **tâche planifiée nocturne** l'applique hors session.
+
+## Stack technique
+
+| Couche | Technologie | Version |
+|--------|-------------|---------|
+| Application | Jade | 1.8.0 |
+| Interface | Flutter (Dart SDK) / `http` / `flutter_markdown` | SDK `^3.12.2` / 1.2 / 0.7 |
+| Backend | Python | >= 3.12 |
+| API locale | FastAPI / Uvicorn | 0.139.0 / 0.49.0 |
+| Vector store | ChromaDB (PersistentClient, embarqué) | 1.5.9 |
+| Embeddings | fastembed (ONNX CPU) — `multilingual-e5-large` | 0.8.0 |
+| Recherche mots-clés | rank-bm25 | >= 0.2 |
+| Reranking | fastembed cross-encoder — `jina-reranker-v2` | 0.8.0 |
+| Parsing | python-docx / openpyxl / pypdf / extract-msg / odfpy | 1.2 / 3.1.5 / 6.14.2 / >= 0.48 / >= 1.4 |
+| Création de fichiers | python-docx / python-pptx / openpyxl / reportlab | 1.2 / >= 1.0 / 3.1.5 / >= 4.0 |
+| OCR (optionnel) | rapidocr-onnxruntime | >= 1.3 |
+| Client HTTPS sortant | httpx | 0.28.1 |
+| Licences (JWT Ed25519) | pyjwt[crypto] | >= 2.9 |
+| LLM central | Ollama (`qwen3.5`, 3 niveaux) | — |
+| Packaging | PyInstaller + Inno Setup 6 | >= 6.0 / 6 |
 
 ## Prérequis
 
@@ -140,19 +154,43 @@ La configuration vit dans un fichier **`.env`** :
 - **En installé** : le fichier est **généré automatiquement par l'assistant
   d'installation** (à côté de l'exécutable), à partir des identifiants saisis.
 
-**Aucun secret n'est versionné dans le dépôt.** Principales clés :
+**Aucun secret n'est versionné dans le dépôt.** Défauts définis dans
+`ragagent/config.py` (`load_settings`). Un secret vide non renseigné désactive
+proprement la fonctionnalité associée.
 
-| Clé | Rôle |
-|-----|------|
-| `OLLAMA_URL`, `OLLAMA_MODEL`, `ROUTER_MODEL`, `STRONG_MODEL` | LLM central (3 niveaux) |
-| `CF_ACCESS_CLIENT_ID/SECRET` | service token Cloudflare Access du LLM |
-| `SEARXNG_URL` + `SEARXNG_CF_ACCESS_CLIENT_ID/SECRET` | recherche web interne |
-| `EMBED_MODEL`, `RERANK_ENABLED` | embeddings / reranker |
-| `RESEND_API_KEY`, `FEEDBACK_EMAIL` | retours utilisateur (API Resend → feedback@example.com) |
-| `NTFS_FILTER` | filtrage des droits NTFS par utilisateur |
-| `REINDEX_MINUTES` | réindexation automatique périodique |
-| `UPDATE_MODE` | `manual` (poste : bouton) ou `scheduled` (RDS : tâche nocturne) |
-| `GITEA_API_URL`, `GITEA_REPO`, `GITEA_TOKEN` | source des mises à jour (releases Gitea) |
+| Clé | Type | Défaut | Rôle |
+|-----|------|--------|------|
+| `DOCS_DIR` `DATA_DIR` `LOG_DIR` `MODEL_CACHE_DIR` | chemin | `.\testdata` `.\data` `.\logs` `.\models` (dev) | dossiers locaux ; en installé, sous `%PROGRAMDATA%\Jade` |
+| `EMBED_MODEL` | str | `intfloat/multilingual-e5-large` | modèle d'embeddings (changer force une réindexation) |
+| `CHUNK_TOKENS` / `CHUNK_OVERLAP` | int | `400` / `60` | découpage des chunks |
+| `TOP_K` / `MIN_SCORE` | int / float | `10` / `0.35` | nombre de candidats / seuil de pertinence |
+| `OLLAMA_URL` | url | `https://llm.example.com` | LLM central (via Cloudflare Access) |
+| `OLLAMA_MODEL` | str | `qwen3.5:4b` | modèle standard |
+| `ROUTER_MODEL` | str | `` (→ `OLLAMA_MODEL`) | petit modèle de pré-analyse |
+| `STRONG_MODEL` | str | `` (→ `OLLAMA_MODEL`) | modèle performant (questions complexes) |
+| `VISION_MODEL` | str | `qwen3.5:9b` | modèle multimodal (images) |
+| `NUM_CTX` / `REQUEST_TIMEOUT` | int / float(s) | `8192` / `120` | contexte LLM / timeout requête |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | secret | `` | service token Cloudflare Access du LLM |
+| `UI_HOST` / `UI_PORT` | str / int\|`auto` | `127.0.0.1` / `8765` | API locale (`auto` = port par session RDS) |
+| `CLIENT_NAME` / `KEEP_ALIVE` | str | `Jade` / `30m` | libellé client / maintien du modèle en mémoire |
+| `REINDEX_MINUTES` | int | `30` | réindexation automatique périodique |
+| `WEB_FALLBACK` / `WEB_RESULTS` | bool / int | `1` / `3` | recherche web de repli / nombre de résultats |
+| `SEARXNG_URL` + `SEARXNG_CF_ACCESS_CLIENT_ID`/`_SECRET` | url + secret | `` | recherche web interne (SearXNG) |
+| `FEEDBACK_EMAIL` | str | `feedback@example.com` | destinataire du retour utilisateur (client e-mail par défaut) |
+| `OCR_ENABLED` / `OCR_INDEX` | bool | `1` / `1` | OCR local (nécessite l'extra `[ocr]`) |
+| `HYBRID_ENABLED` / `RERANK_ENABLED` | bool | `1` / `1` | recherche hybride BM25 / reranking cross-encoder |
+| `RERANK_MODEL` | str | `jinaai/jina-reranker-v2-base-multilingual` | modèle de reranking |
+| `CPU_THREADS` | int | `2` | threads ONNX (borné sur RDS partagé) |
+| `NTFS_FILTER` | bool | `1` | filtrage des droits NTFS par utilisateur |
+| `UPDATE_ENABLED` / `UPDATE_MODE` | bool / str | `1` / `manual` | `manual` (poste : bouton) ou `scheduled` (RDS : tâche nocturne) |
+| `GITEA_API_URL` / `GITEA_REPO` / `GITEA_TOKEN` | url / str / secret | `https://git.example.com` / `example/jade` / `` | source des mises à jour (releases Gitea) |
+| `SETUP_PASSWORD` | secret | `` | mot de passe de l'installateur (auto-update silencieux) |
+| `MODELS_URL` / `MODELS_SHA256` | url / str | `https://models.example.com/jade-models.tar` / `` | archive des modèles + empreinte vérifiée |
+| `LICENSE_ENABLED` | bool | `0` | active le système de licences (voir *Licences*) |
+| `LICENSE_URL` / `LICENSE_KEY` | url / secret | `` | serveur de licences / clé opaque du client |
+| `LICENSE_PUBLIC_KEY` | str | clé DEV embarquée | clé publique Ed25519 (vérif JWT hors ligne) |
+| `LICENSE_CF_ACCESS_CLIENT_ID`/`_SECRET` | secret | `` | service token Cloudflare dédié au serveur de licences |
+| `GRACE_DAYS` | int | `7` | tolérance hors ligne après expiration du bail |
 
 ## Développement
 
@@ -198,6 +236,20 @@ python -m PyInstaller jade.spec --noconfirm
 > Non fait à ce stade : **signature de code** (SmartScreen affichera « éditeur
 > inconnu » — à prévoir avant de livrer l'auto-update en production), service
 > Windows d'indexation.
+
+## Tests
+
+```bash
+# Tests unitaires du backend (fusion RRF, parsing du routeur, semver de l'updater)
+.venv\Scripts\python.exe -m pytest
+
+# Analyse statique de l'interface
+cd flutter_app && flutter analyze
+```
+
+Les tests unitaires vivent dans `tests/unit/`. `jade check` (voir
+*Développement*) fait office de test d'intégration léger : il vérifie les
+embeddings, le store local et l'accès au LLM.
 
 ## Mises à jour
 
@@ -296,11 +348,25 @@ ragagent/          backend (API pure)
   ingest/            parsing multi-format + indexation incrémentale
   rag.py, hybrid.py  retrieval hybride, BM25, fusion RRF, reranker
   router.py          pré-analyse (routage documents/web/direct)
+  embedding.py       embeddings locaux (fastembed ONNX CPU)
+  store.py           vector store local (ChromaDB PersistentClient)
+  llm.py             client HTTPS sortant vers le LLM central
+  websearch.py       recherche web de repli (SearXNG / DuckDuckGo)
   memory.py          mémoire inter-conversations (locale)
   chat_store.py      conversations SQLite chiffrées (DPAPI)
   ntfs.py            filtrage des droits NTFS par utilisateur
+  security.py        chiffrement au repos (DPAPI / EFS)
+  audit.py           journal des appels sortants (logs/outbound.jsonl)
   filegen.py         création de fichiers (docx/xlsx/pdf/pptx/…)
+  ocr.py             OCR local optionnel (rapidocr, CPU)
+  updater.py         mises à jour via releases Gitea
+  licensing.py       vérification de licence côté client (JWT, grâce)
+  models_fetch.py    téléchargement des modèles au 1er lancement
+  config.py, cli.py  configuration (.env) et CLI (jade)
+licsrv/            serveur de licences INTERNE (FastAPI + SQLite, Ed25519)
+tests/unit/        tests unitaires (RRF, routeur, semver)
 jade.spec          build PyInstaller du backend
+jade_launcher.py   point d'entrée de l'exécutable gelé
 installer/         script Inno Setup (assistant qui écrit le .env local)
 .env.example       modèle de configuration (sans secret) à copier en .env
 ```

@@ -311,8 +311,6 @@ def _parse_odt(path: Path) -> list[Section]:
 
 def _email_sections(msg, name: str) -> list[Section]:
     """Construit les Sections communes .eml / .msg à partir d'un objet email."""
-    import email.utils
-
     headers = []
     for label, key in (("De", "from"), ("À", "to"), ("Objet", "subject"), ("Date", "date")):
         val = msg.get(key) if hasattr(msg, "get") else None

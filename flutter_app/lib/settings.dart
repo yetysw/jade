@@ -25,6 +25,8 @@ Future<void> showSettingsDialog(
   );
 }
 
+/// Contenu de la boite de dialogue des reglages : dossiers a indexer,
+/// reindexation, suppression de l'historique. Ouverte via [showSettingsDialog].
 class SettingsView extends StatefulWidget {
   final ApiClient api;
   final VoidCallback onHistoryCleared;
