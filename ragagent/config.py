@@ -17,6 +17,17 @@ from platformdirs import user_data_dir as _user_data_dir
 # reprise repart (huggingface_hub reprend les fichiers partiels).
 os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "30")
 
+# Clé publique Ed25519 par défaut pour vérifier les JWT de licence (hors ligne).
+# ⚠️ Clé de DÉV. En production, générer la paire sur le serveur de licences
+# (`python -m licsrv.keys`) et remplacer cette valeur (ou la fournir via
+# LICENSE_PUBLIC_KEY dans le .env). La clé privée correspondante ne doit JAMAIS
+# être versionnée ni distribuée.
+_DEFAULT_LICENSE_PUBLIC_KEY = (
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MCowBQYDK2VwAyEAotaSGiSpFu3szAcGnEp/8t1IAlh1JsJTOp+cx80V3yQ=\n"
+    "-----END PUBLIC KEY-----\n"
+)
+
 FROZEN = getattr(sys, "frozen", False)  # exécutable PyInstaller (application installée)
 
 if FROZEN:
@@ -97,6 +108,15 @@ class Settings:
     rerank_model: str
     ntfs_filter: bool
     cpu_threads: int
+    # Licence (optionnelle, désactivée par défaut — voir licensing.py). Le
+    # serveur licsrv est derrière Cloudflare Access, comme le LLM/SearXNG.
+    license_enabled: bool
+    license_url: str
+    license_key: str  # clé opaque du client (secret) — scellée dans le .env
+    license_public_key: str  # clé publique Ed25519 (vérif JWT hors ligne)
+    license_cf_client_id: str  # service token CF DÉDIÉ au serveur de licences
+    license_cf_client_secret: str
+    grace_days: int  # jours de tolérance hors ligne après expiration du bail
     # Mises à jour (releases Gitea) — voir updater.py
     update_enabled: bool
     update_mode: str  # "manual" (poste client, bouton) | "scheduled" (RDS, tâche)
@@ -220,6 +240,13 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         rerank_enabled=get("RERANK_ENABLED", "1") not in ("0", "false", ""),
         rerank_model=get("RERANK_MODEL", "jinaai/jina-reranker-v2-base-multilingual"),
         ntfs_filter=get("NTFS_FILTER", "1") not in ("0", "false", ""),
+        license_enabled=get("LICENSE_ENABLED", "0") not in ("0", "false", ""),
+        license_url=get("LICENSE_URL", "").rstrip("/"),
+        license_key=get("LICENSE_KEY", ""),
+        license_public_key=get("LICENSE_PUBLIC_KEY", _DEFAULT_LICENSE_PUBLIC_KEY),
+        license_cf_client_id=get("LICENSE_CF_ACCESS_CLIENT_ID", ""),
+        license_cf_client_secret=get("LICENSE_CF_ACCESS_CLIENT_SECRET", ""),
+        grace_days=int(get("GRACE_DAYS", "7")),
         # threads ONNX (embeddings/reranker) : borné pour ne pas monopoliser le
         # CPU d'un serveur RDS partagé
         cpu_threads=int(get("CPU_THREADS", "2")),

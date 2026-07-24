@@ -19,7 +19,7 @@ param(
   [string]$GiteaUrl = "https://git.example.com",
   [string]$Owner    = "Jade",
   [string]$Repo     = "jade",
-  [string]$Tag      = "v1.7.0"
+  [string]$Tag      = "v1.8.0"
 )
 
 $ErrorActionPreference = "Stop"

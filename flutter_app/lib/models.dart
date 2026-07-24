@@ -6,12 +6,14 @@ class AppStatus {
   final String appVersion;
   final bool? llmOk;
   final int chunksIndexed;
+  final LicenseInfo license;
 
   AppStatus({
     required this.username,
     required this.appVersion,
     required this.llmOk,
     required this.chunksIndexed,
+    required this.license,
   });
 
   factory AppStatus.fromJson(Map<String, dynamic> j) => AppStatus(
@@ -19,6 +21,27 @@ class AppStatus {
         appVersion: j['app_version'] ?? '',
         llmOk: j['llm_ok'],
         chunksIndexed: j['chunks_indexed'] ?? 0,
+        license: LicenseInfo.fromJson(
+            (j['license'] as Map<String, dynamic>?) ?? const {}),
+      );
+}
+
+/// État de licence (miroir du bloc `license` de /api/status).
+class LicenseInfo {
+  final String status; // off | active | grace | expired | suspended
+  final String detail;
+  const LicenseInfo({required this.status, required this.detail});
+
+  /// Bandeau à montrer seulement hors « fonctionnement normal ».
+  bool get showBanner => status == 'grace' || status == 'expired' ||
+      status == 'suspended';
+
+  /// Rouge (bloquant) vs information (grâce).
+  bool get isBlocking => status == 'expired' || status == 'suspended';
+
+  factory LicenseInfo.fromJson(Map<String, dynamic> j) => LicenseInfo(
+        status: j['status'] ?? 'off',
+        detail: j['detail'] ?? '',
       );
 }
 

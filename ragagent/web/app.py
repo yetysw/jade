@@ -26,7 +26,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from .. import models_fetch, ntfs, ocr, prefs, updater, winmem
+from .. import licensing, models_fetch, ntfs, ocr, prefs, updater, winmem
 from ..chat_store import DEFAULT_TITLE, ChatStore
 from ..config import Settings
 from ..openers import open_path, open_url, reveal_path
@@ -414,6 +414,7 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
             "total_mb": 0,
             "ready": False,
         },
+        "license": {"status": "off"},  # renseigné par le thread de fond
     }
     index_lock = threading.Lock()
 
@@ -573,13 +574,22 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
         except OSError:
             pass
         init.update(phase="ready", detail="Prêt", ready=True)
+        # licence (optionnelle) : 1re vérification au démarrage, non bloquante
+        licensing.refresh(settings)
+        state["license"] = licensing.status(settings, force=True)
         winmem.trim_working_set()  # démarrage terminé : libérer la RAM inutilisée
+        elapsed = 0
         while True:
-            if settings.reindex_minutes > 0:
-                time.sleep(settings.reindex_minutes * 60)
-                _do_index()
-            else:
+            if settings.reindex_minutes <= 0:
                 return
+            time.sleep(settings.reindex_minutes * 60)
+            elapsed += settings.reindex_minutes
+            _do_index()
+            # rafraîchir la licence ~toutes les 6 h (indépendamment de l'index)
+            if settings.license_enabled and elapsed >= 360:
+                elapsed = 0
+                licensing.refresh(settings)
+                state["license"] = licensing.status(settings, force=True)
 
     threading.Thread(target=_background_loop, daemon=True).start()
 
@@ -737,6 +747,7 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
             "indexing": state["indexing"],
             "last_index": state["last_index"],
             "reindex_minutes": settings.reindex_minutes,
+            "license": state["license"],
         }
 
     @app.get("/api/init")
@@ -745,6 +756,12 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
         l'écran de démarrage. Le serveur répond dès le lancement ; `ready` passe
         à vrai quand les modèles sont chargés."""
         return state["init"]
+
+    @app.get("/api/license")
+    def license_status():
+        """État de licence (off|active|grace|expired|suspended). Non bloquant ;
+        seuls expired/suspended empêchent l'envoi d'une question."""
+        return state["license"]
 
     # ------------------------------------------------------------ mises à jour
 
@@ -1089,6 +1106,15 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
         question = req.question.strip()
         if not question:
             raise HTTPException(400, "Question vide")
+        # licence échue/suspendue : refus PROPRE (message clair en SSE) plutôt
+        # que d'attendre la coupure Cloudflare (erreur brute). active/grace/off
+        # laissent passer.
+        lic_block = licensing.blocks_usage(settings)
+        if lic_block:
+            def _blocked():
+                yield _sse({"type": "error", "message": lic_block})
+                yield _sse({"type": "done", "interrupted": False})
+            return StreamingResponse(_blocked(), media_type="text/event-stream")
         incognito = req.incognito
         # incognito : conversation éphémère, jamais persistée ni mémorisée ;
         # l'historique est fourni par le client (rien en base).

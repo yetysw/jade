@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.7.0"
+#define AppVersion "1.8.0"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -222,7 +222,16 @@ begin
     { meme service token Cloudflare Access pour tous les services Jade }
     'SEARXNG_CF_ACCESS_CLIENT_ID=' + Trim(LlmPage.Values[1]) + NL +
     'SEARXNG_CF_ACCESS_CLIENT_SECRET=' + Trim(LlmPage.Values[2]) + NL +
-    'FEEDBACK_EMAIL=feedback@example.com' + NL;
+    'FEEDBACK_EMAIL=feedback@example.com' + NL +
+    '# Licence (optionnelle) : passer LICENSE_ENABLED=1 + renseigner LICENSE_URL/' + NL +
+    '# LICENSE_KEY/LICENSE_CF_ACCESS_* + LICENSE_PUBLIC_KEY pour l''activer.' + NL +
+    'LICENSE_ENABLED=0' + NL +
+    'LICENSE_URL=https://license.example.com' + NL +
+    'LICENSE_KEY=' + NL +
+    'LICENSE_CF_ACCESS_CLIENT_ID=' + NL +
+    'LICENSE_CF_ACCESS_CLIENT_SECRET=' + NL +
+    'LICENSE_PUBLIC_KEY=' + NL +
+    'GRACE_DAYS=7' + NL;
   { le backend (PyInstaller) lit le .env à côté de son exécutable }
   SaveStringToFile(ExpandConstant('{app}\backend\.env'), S, False);
 end;
