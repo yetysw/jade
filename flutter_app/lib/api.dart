@@ -61,6 +61,64 @@ class ApiClient {
   Future<InitStatus> initStatus() async =>
       InitStatus.fromJson(await _json('GET', '/api/init'));
 
+  /// État de santé (LLM, modèles, disque) pour le bandeau et le diagnostic.
+  Future<HealthInfo> health() async =>
+      HealthInfo.fromJson(await _json('GET', '/api/health'));
+
+  // ---------------------------------------- identifiants de connexion
+
+  /// Identifiants de connexion actuels (le secret n'est jamais renvoyé).
+  Future<ConnConfig> getConfig() async =>
+      ConnConfig.fromJson(await _json('GET', '/api/config'));
+
+  /// Enregistre et applique à chaud les identifiants de connexion. Un secret
+  /// vide conserve celui déjà enregistré. Retourne l'état du LLM après essai.
+  Future<Map<String, dynamic>> setConfig({
+    required String ollamaUrl,
+    required String searxngUrl,
+    required String cfClientId,
+    String cfSecret = '',
+  }) async =>
+      (await _json('POST', '/api/config', {
+        'ollama_url': ollamaUrl,
+        'searxng_url': searxngUrl,
+        'cf_client_id': cfClientId,
+        'cf_secret': cfSecret,
+      })) as Map<String, dynamic>;
+
+  // ---------------------------------------------- premier lancement / légal
+
+  /// État du premier lancement (acceptation légale, onboarding).
+  Future<OnboardingState> onboardingState() async =>
+      OnboardingState.fromJson(await _json('GET', '/api/onboarding'));
+
+  /// Enregistre l'acceptation des CGU + politique de confidentialité.
+  Future<void> acceptLegal() => _json('POST', '/api/onboarding/accept-legal');
+
+  /// Marque le parcours d'accueil comme terminé.
+  Future<void> completeOnboarding() =>
+      _json('POST', '/api/onboarding/complete');
+
+  /// Texte Markdown d'un document légal (`cgu` | `privacy`).
+  Future<String> legalDoc(String name) async {
+    final j = await _json('GET', '/api/legal/doc?name=$name');
+    return (j?['markdown'] ?? '') as String;
+  }
+
+  // ------------------------------------------------ sauvegarde / migration
+
+  /// Exporte l'historique dans un fichier .jadebak. Retourne le chemin produit
+  /// et le nombre d'éléments sauvegardés.
+  Future<Map<String, dynamic>> backupChats({String dest = ''}) async =>
+      (await _json('POST', '/api/backup', {'dest': dest}))
+          as Map<String, dynamic>;
+
+  /// Restaure un fichier .jadebak (fusion non destructive). Retourne le nombre
+  /// d'éléments réellement importés.
+  Future<Map<String, dynamic>> restoreChats(String path) async =>
+      (await _json('POST', '/api/restore', {'path': path}))
+          as Map<String, dynamic>;
+
   // ------------------------------------------------------- mises à jour
 
   /// État de mise à jour (release Gitea la plus récente). Ne lève jamais :

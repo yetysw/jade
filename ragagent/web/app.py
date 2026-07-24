@@ -75,6 +75,92 @@ def _dir_size(path) -> int:
     return total
 
 
+def _disk_free_gb(path) -> float:
+    """Espace disque libre (Go) sur le volume contenant `path`. 0.0 si inconnu."""
+    import shutil
+
+    try:
+        return round(shutil.disk_usage(str(path)).free / (1024 ** 3), 1)
+    except OSError:
+        return 0.0
+
+
+# Seuil sous lequel on alerte l'utilisateur : l'index et les modèles peuvent
+# manquer de place (modèles ~3 Go, index proportionnel au volume documentaire).
+DISK_LOW_GB = 2.0
+
+
+_LEGAL_FILES = {"cgu": "CGU.md", "privacy": "confidentialite-donnees.md"}
+_LEGAL_FALLBACK = {
+    "cgu": ("# Conditions générales d'utilisation\n\nLe texte complet des CGU "
+            "n'a pas pu être chargé. Contactez Jade (feedback@example.com)."),
+    "privacy": ("# Protection des données\n\nJade traite vos documents "
+                "localement : ils ne quittent jamais ce poste. Seuls votre "
+                "question et de courts extraits sont transmis, chiffrés, au "
+                "serveur d'IA de Jade le temps de produire la réponse. Le texte "
+                "complet n'a pas pu être chargé — contactez feedback@example.com."),
+}
+
+
+def _write_env_values(updates: dict) -> "Path":
+    """Met à jour des clés du .env en place, en préservant les autres lignes,
+    commentaires et l'ordre. Les clés absentes sont ajoutées à la fin.
+
+    Args:
+        updates: correspondance CLÉ -> valeur en clair à écrire.
+
+    Returns:
+        Path: le chemin du .env écrit.
+
+    Raises:
+        OSError: si le .env ne peut être écrit.
+    """
+    from ..config import PROJECT_ROOT
+
+    path = PROJECT_ROOT / ".env"
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raw = path.read_text(encoding="cp1252")
+    except OSError:
+        raw = ""
+    out, seen = [], set()
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in updates:
+                out.append(f"{key}={updates[key]}")
+                seen.add(key)
+                continue
+        out.append(line)
+    for key, val in updates.items():
+        if key not in seen:
+            out.append(f"{key}={val}")
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return path
+
+
+def _legal_markdown(name: str) -> str:
+    """Contenu Markdown d'un document légal embarqué (`cgu` | `privacy`).
+
+    Lit le fichier dans docs/ (embarqué dans le bundle PyInstaller, sinon la
+    racine du dépôt en développement). Repli sur un texte minimal si absent, pour
+    ne jamais bloquer l'écran d'acceptation au premier lancement.
+    """
+    from ..config import BUNDLE_DIR, PROJECT_ROOT
+
+    fname = _LEGAL_FILES.get(name, _LEGAL_FILES["cgu"])
+    for base in (BUNDLE_DIR, PROJECT_ROOT):
+        p = base / "docs" / fname
+        try:
+            if p.is_file():
+                return p.read_text(encoding="utf-8")
+        except OSError:
+            pass
+    return _LEGAL_FALLBACK.get(name, _LEGAL_FALLBACK["cgu"])
+
+
 NO_INFO_ANSWER = (
     "Je ne trouve pas d'information pertinente dans les documents indexés "
     "pour cette question."
@@ -158,6 +244,28 @@ class OpenUrlRequest(BaseModel):
 
 class RenameRequest(BaseModel):
     title: str
+
+
+class ConfigRequest(BaseModel):
+    """Identifiants de connexion aux services Jade, modifiables dans les réglages
+    (évite de rééditer le .env ou de réinstaller)."""
+    ollama_url: str = ""
+    searxng_url: str = ""
+    cf_client_id: str = ""
+    cf_secret: str = ""  # vide = conserver le secret existant
+
+
+class RestoreRequest(BaseModel):
+    path: str  # chemin du fichier de sauvegarde (.jadebak) à restaurer
+
+
+class BackupRequest(BaseModel):
+    dest: str = ""  # dossier de destination ; vide = dossier de sauvegarde par défaut
+
+
+# Version des documents légaux (CGU + confidentialité). À incrémenter quand le
+# contenu change : l'utilisateur devra ré-accepter la nouvelle version.
+LEGAL_VERSION = "2026-07"
 
 
 def _sse(payload: dict) -> str:
@@ -730,6 +838,46 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
         # API pure : l'interface est l'application native (flutter_app/)
         return {"app": "Jade", "api": "ok", "hint": "interface : application native"}
 
+    def _app_version() -> str:
+        from .. import __version__
+
+        return __version__
+
+    def _safe_roots() -> list:
+        from ..index_config import get_roots
+
+        try:
+            return get_roots(settings)
+        except Exception:
+            return []
+
+    def _default_backup_dir() -> Path:
+        """Dossier de sauvegarde par défaut : Documents de l'utilisateur (facile à
+        retrouver pour migrer), sinon le dossier de données par utilisateur."""
+        docs = Path.home() / "Documents"
+        base = docs if docs.is_dir() else settings.user_data_dir
+        return base / "Jade-sauvegardes"
+
+    def _health() -> dict:
+        """État de santé synthétique pour l'auto-diagnostic (bandeau + panneau
+        des réglages). Regroupe : LLM central joignable, modèles prêts, espace
+        disque. `ok` est faux dès qu'un point mérite l'attention de l'utilisateur."""
+        free = _disk_free_gb(settings.data_dir)
+        disk_low = 0 < free < DISK_LOW_GB
+        models_ready = bool(state["init"].get("ready"))
+        llm_ok = state["llm_ok"]
+        ok = (llm_ok is not False) and models_ready and not disk_low
+        return {
+            "ok": ok,
+            "llm_ok": llm_ok,
+            "llm_error": state["llm_error"],
+            "models_ready": models_ready,
+            "disk_free_gb": free,
+            "disk_low": disk_low,
+            "chunks_indexed": store.count(),
+            "indexing": state["indexing"],
+        }
+
     @app.get("/api/status")
     def status():
         _check_llm()
@@ -748,7 +896,14 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
             "last_index": state["last_index"],
             "reindex_minutes": settings.reindex_minutes,
             "license": state["license"],
+            "health": _health(),
         }
+
+    @app.get("/api/health")
+    def health():
+        """État de santé pour le bandeau d'alerte et le panneau de diagnostic."""
+        _check_llm()
+        return _health()
 
     @app.get("/api/init")
     def init_status():
@@ -814,6 +969,178 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
     def set_prefs(req: PrefsRequest):
         prefs.set_bool("Incognito", req.incognito)
         return {"incognito": req.incognito}
+
+    # ------------------------------- identifiants de connexion (modifiables)
+
+    @app.get("/api/config")
+    def get_config():
+        """Identifiants de connexion actuels pour l'écran de réglages. Le secret
+        Cloudflare n'est jamais renvoyé (seulement s'il est défini)."""
+        return {
+            "ollama_url": settings.ollama_url,
+            "searxng_url": settings.searxng_url,
+            "cf_client_id": settings.cf_access_client_id,
+            "cf_secret_set": bool(settings.cf_access_client_secret),
+        }
+
+    @app.post("/api/config")
+    def set_config(req: ConfigRequest):
+        """Enregistre les identifiants de connexion dans le .env (secrets scellés
+        par DPAPI) et les applique immédiatement, sans redémarrage ni réinstallation.
+
+        Le même couple Cloudflare Access sert au serveur d'IA et à SearXNG (comme
+        à l'installation). Un secret laissé vide conserve celui déjà enregistré."""
+        ollama_url = req.ollama_url.strip().rstrip("/")
+        searxng_url = req.searxng_url.strip().rstrip("/")
+        cf_id = req.cf_client_id.strip()
+        cf_secret = req.cf_secret.strip()
+        if not ollama_url.startswith(("http://", "https://")):
+            raise HTTPException(400, "L'adresse du serveur d'IA doit commencer par http(s)://")
+        if searxng_url and not searxng_url.startswith(("http://", "https://")):
+            raise HTTPException(400, "L'adresse SearXNG doit commencer par http(s)://")
+
+        updates = {
+            "OLLAMA_URL": ollama_url,
+            "SEARXNG_URL": searxng_url,
+            "CF_ACCESS_CLIENT_ID": cf_id,
+            "SEARXNG_CF_ACCESS_CLIENT_ID": cf_id,
+        }
+        if cf_secret:  # secret vide -> on conserve l'actuel
+            updates["CF_ACCESS_CLIENT_SECRET"] = cf_secret
+            updates["SEARXNG_CF_ACCESS_CLIENT_SECRET"] = cf_secret
+        try:
+            _write_env_values(updates)
+        except OSError as e:
+            raise HTTPException(400, f"Écriture de la configuration impossible : {e}")
+        # scelle les secrets (DPAPI machine) — no-op hors Windows
+        try:
+            from ..cli import _cmd_seal_env
+
+            _cmd_seal_env(None)
+        except Exception as e:  # ne bloque pas l'enregistrement
+            log.warning("Scellement du .env après édition échoué : %s", e)
+
+        # application à chaud : on met à jour l'objet settings et le client LLM
+        settings.ollama_url = ollama_url
+        settings.searxng_url = searxng_url
+        settings.cf_access_client_id = cf_id
+        settings.searxng_cf_client_id = cf_id
+        if cf_secret:
+            settings.cf_access_client_secret = cf_secret
+            settings.searxng_cf_client_secret = cf_secret
+        llm.headers.pop("CF-Access-Client-Id", None)
+        llm.headers.pop("CF-Access-Client-Secret", None)
+        if settings.cf_access_client_id and settings.cf_access_client_secret:
+            llm.headers["CF-Access-Client-Id"] = settings.cf_access_client_id
+            llm.headers["CF-Access-Client-Secret"] = settings.cf_access_client_secret
+        _check_llm(force=True)
+        return {"ok": True, "llm_ok": state["llm_ok"], "llm_error": state["llm_error"]}
+
+    # ---------------------------------- premier lancement (CGU + onboarding)
+
+    @app.get("/api/onboarding")
+    def onboarding_state():
+        """État du premier lancement : version des documents légaux, acceptation
+        déjà donnée, onboarding terminé, et si des dossiers ont déjà été
+        configurés (pour décider s'il faut guider l'utilisateur)."""
+        from ..index_config import _file as roots_file
+
+        accepted = prefs.get_str("LegalAcceptedVersion", "")
+        return {
+            "legal_version": LEGAL_VERSION,
+            "legal_accepted": accepted == LEGAL_VERSION,
+            "onboarding_done": prefs.get_bool("OnboardingDone", False),
+            "configured": roots_file(settings).exists(),
+        }
+
+    @app.post("/api/onboarding/accept-legal")
+    def accept_legal():
+        """Enregistre l'acceptation des CGU + politique de confidentialité pour la
+        version courante. Requis avant utilisation au premier lancement."""
+        prefs.set_str("LegalAcceptedVersion", LEGAL_VERSION)
+        return {"legal_accepted": True, "legal_version": LEGAL_VERSION}
+
+    @app.post("/api/onboarding/complete")
+    def complete_onboarding():
+        """Marque le parcours de premier lancement comme terminé (ne se réaffiche
+        plus)."""
+        prefs.set_bool("OnboardingDone", True)
+        return {"onboarding_done": True}
+
+    @app.get("/api/legal/doc")
+    def legal_doc(name: str = "cgu"):
+        """Texte Markdown d'un document légal (cgu | privacy) pour affichage dans
+        l'application. Repli sur un texte minimal si le fichier n'est pas
+        embarqué."""
+        return {"name": name, "markdown": _legal_markdown(name)}
+
+    # ----------------------------------------- sauvegarde / restauration (chats)
+
+    @app.post("/api/backup")
+    def backup_chats(req: BackupRequest):
+        """Exporte l'historique (déchiffré, portable) dans un fichier .jadebak
+        (zip). L'utilisateur gère ensuite ce fichier (clé USB, partage réseau)
+        pour migrer vers un autre poste. Retourne le chemin produit."""
+        import io
+        import zipfile
+
+        data = chats.export_all()
+        payload = {
+            "format": "jade-backup",
+            "version": 1,
+            "app_version": _app_version(),
+            "exported_at": licensing.utc_now_iso(),
+            "index_roots": [str(p) for p in _safe_roots()],
+            **data,
+        }
+        dest_dir = Path(req.dest.strip()) if req.dest.strip() else _default_backup_dir()
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise HTTPException(400, f"Dossier de destination inaccessible : {e}")
+        stamp = licensing.utc_now_iso().replace(":", "").replace("-", "")[:15]
+        out = dest_dir / f"jade-sauvegarde-{stamp}.jadebak"
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("jade-backup.json",
+                       json.dumps(payload, ensure_ascii=False, indent=2))
+        try:
+            out.write_bytes(buf.getvalue())
+        except OSError as e:
+            raise HTTPException(400, f"Écriture de la sauvegarde impossible : {e}")
+        return {
+            "path": str(out),
+            "conversations": len(data["conversations"]),
+            "folders": len(data["folders"]),
+        }
+
+    @app.post("/api/restore")
+    def restore_chats(req: RestoreRequest):
+        """Restaure un fichier .jadebak (ou le .json qu'il contient) produit par
+        /api/backup. Fusion non destructive (les conversations existantes sont
+        conservées). Re-chiffre le contenu avec la clé de CETTE machine."""
+        import zipfile
+
+        src = Path(req.path.strip())
+        if not src.is_file():
+            raise HTTPException(400, f"Fichier introuvable : {src}")
+        try:
+            raw = src.read_bytes()
+            if zipfile.is_zipfile(src):
+                with zipfile.ZipFile(src) as z:
+                    name = next((n for n in z.namelist() if n.endswith(".json")), None)
+                    if not name:
+                        raise HTTPException(400, "Sauvegarde vide ou corrompue.")
+                    raw = z.read(name)
+            payload = json.loads(raw.decode("utf-8"))
+        except (OSError, ValueError, zipfile.BadZipFile) as e:
+            raise HTTPException(400, f"Sauvegarde illisible : {e}")
+        try:
+            counts = chats.import_all(payload)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        state["welcome"] = {"at": 0.0, "sig": "", "items": []}  # invalide le cache
+        return counts
 
     # -------------------------------------------- arrêt de la génération en cours
 

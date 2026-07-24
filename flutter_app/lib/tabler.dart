@@ -47,4 +47,7 @@ class TablerIcons {
   static const IconData send = IconData(0xfd5d, fontFamily: _f);
   static const IconData messages = IconData(0xeb6c, fontFamily: _f);
   static const IconData folderOpen = IconData(0xeaad, fontFamily: _f);
+  static const IconData activity = IconData(0xed23, fontFamily: _f);
+  static const IconData database = IconData(0xea9a, fontFamily: _f);
+  static const IconData upload = IconData(0xeb47, fontFamily: _f);
 }

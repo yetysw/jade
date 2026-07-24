@@ -9,7 +9,11 @@ dans %PROGRAMDATA%\\Jade\\models.
 
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+datas = [
+    # documents légaux affichés au premier lancement (écran d'acceptation)
+    ("docs/CGU.md", "docs"),
+    ("docs/confidentialite-donnees.md", "docs"),
+]
 binaries = []
 hiddenimports = [
     "ragagent",
