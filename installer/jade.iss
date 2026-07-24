@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.5.0"
+#define AppVersion "1.6.0"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -148,12 +148,11 @@ begin
   LlmPage.Values[0] := 'https://llm.example.com';
 
   WebPage := CreateInputQueryPage(LlmPage.ID,
-    'Recherche web et retours utilisateur',
-    'Recherche web interne et envoi des retours a Jade',
-    'Laisser vide un champ non utilise : la fonctionnalite correspondante sera ' +
-    'simplement desactivee.');
+    'Recherche web interne',
+    'Adresse du service SearXNG (facultatif)',
+    'Laisser vide si la recherche web interne n''est pas utilisee : la ' +
+    'fonctionnalite sera simplement desactivee.');
   WebPage.Add('Adresse SearXNG (SEARXNG_URL) :', False);
-  WebPage.Add('Cle API Resend (retours utilisateur) :', True);
   WebPage.Values[0] := 'https://search.example.com';
 end;
 
@@ -197,7 +196,9 @@ begin
     'CF_ACCESS_CLIENT_ID=' + Trim(LlmPage.Values[1]) + NL +
     'CF_ACCESS_CLIENT_SECRET=' + Trim(LlmPage.Values[2]) + NL +
     'UI_HOST=127.0.0.1' + NL +
-    'UI_PORT=8765' + NL +
+    { auto = un port libre PAR SESSION (isolation RDS : chaque utilisateur a }
+    { son propre backend, ses conversations, ses droits NTFS) }
+    'UI_PORT=auto' + NL +
     'CLIENT_NAME=Jade' + NL +
     'KEEP_ALIVE=30m' + NL +
     'REINDEX_MINUTES=30' + NL +
@@ -220,14 +221,46 @@ begin
     { meme service token Cloudflare Access pour tous les services Jade }
     'SEARXNG_CF_ACCESS_CLIENT_ID=' + Trim(LlmPage.Values[1]) + NL +
     'SEARXNG_CF_ACCESS_CLIENT_SECRET=' + Trim(LlmPage.Values[2]) + NL +
-    'FEEDBACK_EMAIL=feedback@example.com' + NL +
-    'RESEND_API_KEY=' + Trim(WebPage.Values[1]) + NL;
+    'FEEDBACK_EMAIL=feedback@example.com' + NL;
   { le backend (PyInstaller) lit le .env à côté de son exécutable }
   SaveStringToFile(ExpandConstant('{app}\backend\.env'), S, False);
+end;
+
+{ Restreint la lecture du .env aux administrateurs + SYSTEM (retire le groupe
+  Users). Sur un serveur RDS, un utilisateur standard ne peut alors plus lire
+  les jetons Cloudflare. icacls est present sur tout Windows. }
+procedure LockEnvAcl;
+var
+  envPath: String;
+  rc: Integer;
+begin
+  envPath := ExpandConstant('{app}\backend\.env');
+  if not FileExists(envPath) then Exit;
+  Exec(ExpandConstant('{sys}\icacls.exe'),
+    '"' + envPath + '" /inheritance:r /grant:r "*S-1-5-32-544:R" "*S-1-5-18:F" "*S-1-5-32-544:F"',
+    '', SW_HIDE, ewWaitUntilTerminated, rc);
+end;
+
+{ Scelle les secrets du .env (DPAPI machine) via le backend. Ainsi le .env,
+  meme lu, ne livre pas les secrets en clair, et reste dechiffrable par toutes
+  les sessions de CETTE machine (RDS). }
+procedure SealEnv;
+var
+  rc: Integer;
+begin
+  Exec(ExpandConstant('{app}\backend\Jade.exe'), 'seal-env', '',
+    SW_HIDE, ewWaitUntilTerminated, rc);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
+  begin
     WriteEnvFile;
+    if not KeepExistingConfig then
+    begin
+      SealEnv;      { chiffre les secrets (DPAPI machine) }
+      LockEnvAcl;   { restreint l'ACL du .env }
+    end;
+  end;
 end;

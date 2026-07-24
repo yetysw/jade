@@ -48,6 +48,17 @@ def _path(value: str) -> Path:
     return p.resolve()
 
 
+def _port(value: str) -> int:
+    """UI_PORT : « auto » (ou 0) = port libre choisi au démarrage, publié dans
+    le fichier de découverte (voir cli._cmd_serve). Indispensable sur RDS :
+    un backend PAR session, sinon les sessions partageraient le même processus
+    (conversations et droits NTFS d'un autre utilisateur)."""
+    v = value.strip().lower()
+    if v in ("auto", ""):
+        return 0
+    return int(v)
+
+
 @dataclass
 class Settings:
     docs_dir: Path
@@ -86,10 +97,6 @@ class Settings:
     rerank_model: str
     ntfs_filter: bool
     cpu_threads: int
-    # Retour utilisateur : envoi par e-mail via l'API Resend (resend.com).
-    # Clé saisie à l'installation ; vide = repli sur le client mail local.
-    resend_api_key: str
-    resend_from: str  # expéditeur (domaine vérifié dans Resend)
     # Mises à jour (releases Gitea) — voir updater.py
     update_enabled: bool
     update_mode: str  # "manual" (poste client, bouton) | "scheduled" (RDS, tâche)
@@ -121,7 +128,11 @@ class Settings:
 
     @property
     def outbound_log(self) -> Path:
-        return self.log_dir / "outbound.jsonl"
+        """Journal des appels sortants — PAR UTILISATEUR (%LOCALAPPDATA%), pas
+        dans le dossier partagé : il contient les extraits envoyés au LLM, un
+        autre utilisateur du serveur ne doit pas pouvoir les lire (le dossier
+        partagé est users-modify) ni les falsifier."""
+        return self.user_data_dir / "logs" / "outbound.jsonl"
 
     @property
     def user_data_dir(self) -> Path:
@@ -136,7 +147,8 @@ class Settings:
 
 
     def ensure_dirs(self) -> None:
-        for d in (self.data_dir, self.log_dir, self.model_cache_dir):
+        for d in (self.data_dir, self.log_dir, self.model_cache_dir,
+                  self.user_data_dir / "logs"):
             d.mkdir(parents=True, exist_ok=True)
 
 
@@ -149,7 +161,13 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         load_dotenv(env_path, encoding="utf-8")
     except UnicodeDecodeError:
         load_dotenv(env_path, encoding="cp1252")
-    get = os.environ.get
+
+    from .security import unprotect
+
+    def get(key: str, default: str = "") -> str:
+        # valeurs scellées DPAPI (« jade seal-env » à l'installation) :
+        # déchiffrement transparent — le reste du code ignore le scellement
+        return unprotect(os.environ.get(key, default))
     return Settings(
         docs_dir=_path(get("DOCS_DIR", _DEF_DOCS)),
         data_dir=_path(get("DATA_DIR", _DEF_DATA)),
@@ -177,7 +195,7 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         cf_access_client_id=get("CF_ACCESS_CLIENT_ID", ""),
         cf_access_client_secret=get("CF_ACCESS_CLIENT_SECRET", ""),
         ui_host=get("UI_HOST", "127.0.0.1"),
-        ui_port=int(get("UI_PORT", "8765")),
+        ui_port=_port(get("UI_PORT", "8765")),
         client_name=get("CLIENT_NAME", "Jade"),
         keep_alive=get("KEEP_ALIVE", "30m"),
         reindex_minutes=int(get("REINDEX_MINUTES", "30")),
@@ -198,8 +216,6 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         rerank_enabled=get("RERANK_ENABLED", "1") not in ("0", "false", ""),
         rerank_model=get("RERANK_MODEL", "jinaai/jina-reranker-v2-base-multilingual"),
         ntfs_filter=get("NTFS_FILTER", "1") not in ("0", "false", ""),
-        resend_api_key=get("RESEND_API_KEY", ""),
-        resend_from=get("RESEND_FROM", "Jade <jade@example.com>"),
         # threads ONNX (embeddings/reranker) : borné pour ne pas monopoliser le
         # CPU d'un serveur RDS partagé
         cpu_threads=int(get("CPU_THREADS", "2")),

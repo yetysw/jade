@@ -22,8 +22,6 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-import httpx
-
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -354,6 +352,24 @@ def _parse_welcome(raw: str) -> list[dict]:
 
 def create_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="Jade", docs_url=None, redoc_url=None)
+
+    @app.middleware("http")
+    async def _host_guard(request, call_next):
+        """Anti DNS-rebinding : un site web malveillant ouvert dans un
+        navigateur du poste peut faire pointer son domaine vers 127.0.0.1 et
+        atteindre cette API. Le navigateur enverra alors SON domaine en Host —
+        on rejette tout Host qui n'est pas le loopback (port ignoré : il est
+        dynamique par session)."""
+        raw = (request.headers.get("host") or "").lower()
+        if raw.startswith("["):  # IPv6 : [::1] ou [::1]:port
+            host = raw.split("]", 1)[0] + "]"
+        else:
+            host = raw.rsplit(":", 1)[0] if ":" in raw else raw
+        if host not in ("127.0.0.1", "localhost", "[::1]"):
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse({"detail": "Hôte non autorisé"}, status_code=421)
+        return await call_next(request)
 
     # Chiffrement au repos (EFS) : index partagé + conversations par utilisateur
     encrypt_at_rest(settings.data_dir)
@@ -956,56 +972,98 @@ def create_app(settings: Settings) -> FastAPI:
 
     # -------------------------------------------------------- retour utilisateur
 
+    def _diagnostic_zip() -> Path:
+        """Assemble un zip de diagnostic pour le support : journaux (ceux de
+        l'utilisateur + journal applicatif), état de l'application et réglages
+        NON sensibles. Aucun secret, aucun contenu de conversation."""
+        import zipfile
+        from .. import __version__
+
+        out_dir = settings.user_data_dir / "diagnostics"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out = out_dir / f"jade-diagnostic-{time.strftime('%Y%m%d-%H%M%S')}.zip"
+        info = {
+            "app": "Jade",
+            "version": __version__,
+            "client": settings.client_name,
+            "utilisateur": _session_display_name(),
+            "plateforme": sys.platform,
+            "chunks_indexes": store.count(),
+            "dossiers_indexes": [str(r) for r in _roots_snapshot()],
+            "llm_ok": state["llm_ok"],
+            "llm_error": state["llm_error"],
+            "dernier_index": state["last_index"],
+            "init": state["init"],
+            "modeles": {"embeddings": settings.embed_model,
+                        "reranker": settings.rerank_model,
+                        "llm": settings.ollama_model},
+        }
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("etat.json", json.dumps(info, ensure_ascii=False, indent=2))
+            candidates = [
+                settings.outbound_log,                    # sortant (par utilisateur)
+                settings.log_dir / "jade.log",            # journal applicatif
+                settings.log_dir / "jade.log.1",
+            ]
+            for f in candidates:
+                try:
+                    if f.exists():
+                        z.write(f, f"logs/{f.name}")
+                except OSError:
+                    pass  # fichier verrouillé/inaccessible : zip quand même
+        return out
+
+    def _roots_snapshot():
+        from ..index_config import get_roots
+
+        try:
+            return get_roots(settings)
+        except Exception:
+            return []
+
     @app.post("/api/feedback")
     def feedback(req: FeedbackRequest):
-        """Envoie le retour utilisateur à Jade par e-mail via l'API Resend
-        (RESEND_API_KEY). Sans clé configurée, repli : ouvre le client mail
-        avec destinataire et objet pré-remplis."""
-        content = req.content.strip()
-        user = _session_display_name()
-        subject = f"Retour Jade — {user}"
-
-        if settings.resend_api_key:
-            if not content:
-                raise HTTPException(400, "Message vide")
-            from .. import __version__
-
-            body = (
-                f"{content}\n\n---\n"
-                f"Utilisateur : {user}\n"
-                f"Version : Jade {__version__}\n"
-                f"Client : {settings.client_name}"
-            )
-            try:
-                with httpx.Client(timeout=15.0) as client:
-                    resp = client.post(
-                        "https://api.resend.com/emails",
-                        headers={"Authorization": f"Bearer {settings.resend_api_key}"},
-                        json={
-                            "from": settings.resend_from,
-                            "to": [settings.feedback_email],
-                            "subject": subject,
-                            "text": body,
-                        },
-                    )
-                    resp.raise_for_status()
-            except httpx.HTTPError as e:
-                log.warning("Envoi du retour utilisateur échoué : %s", e)
-                raise HTTPException(
-                    502, "Envoi impossible pour le moment — réessayez plus tard.")
-            return {"ok": True, "sent": True}
-
-        # repli sans clé API : client mail local
+        """Retour utilisateur : prépare un zip de diagnostic, ouvre le client
+        e-mail par défaut (mailto → Windows/macOS/Linux) pré-rempli vers Jade,
+        et révèle le zip dans l'explorateur pour que l'utilisateur le glisse
+        dans le message (un lien mailto ne peut pas joindre de fichier —
+        limitation du standard, pas de l'application)."""
         import urllib.parse
 
-        mailto = f"mailto:{settings.feedback_email}?subject={urllib.parse.quote(subject)}"
-        if content:
-            mailto += f"&body={urllib.parse.quote(content)}"
+        content = req.content.strip()
+        user = _session_display_name()
+        from .. import __version__
+
+        subject = f"Retour Jade — {user} ({settings.client_name}, v{__version__})"
+
+        zip_path: Path | None = None
+        try:
+            zip_path = _diagnostic_zip()
+        except Exception as e:
+            log.warning("Zip de diagnostic impossible : %s", e)  # mail quand même
+
+        body = content or ""
+        if zip_path is not None:
+            body += (
+                "\n\n---\n"
+                "Merci de joindre le fichier de diagnostic affiché dans "
+                f"l'explorateur :\n{zip_path}"
+            )
+        mailto = (
+            f"mailto:{settings.feedback_email}"
+            f"?subject={urllib.parse.quote(subject)}"
+            f"&body={urllib.parse.quote(body)}"
+        )
         try:
             open_url(mailto)
         except OSError as e:
             raise HTTPException(500, f"Impossible d'ouvrir le client mail : {e}")
-        return {"ok": True, "sent": False}
+        if zip_path is not None:
+            try:
+                reveal_path(str(zip_path))  # explorateur ouvert sur le zip
+            except OSError:
+                pass
+        return {"ok": True, "zip": str(zip_path) if zip_path else ""}
 
     # ------------------------------------------------------------- ask
 

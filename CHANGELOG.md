@@ -7,7 +7,34 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
-## 1.5.0 — 🚧 dev : ⭐ Retours utilisateur + réglages simplifiés
+## 1.6.0 — 🚧 dev : ⭐ Durcissement sécurité (RDS) + retour par e-mail
+
+- ⭐ **Isolation par session RDS** : le backend choisit un **port libre par
+  session** (`UI_PORT=auto`) et le publie dans `%LOCALAPPDATA%\Jade\backend.json` ;
+  l'app Flutter découvre ce port au démarrage. Fini le backend unique partagé
+  entre utilisateurs (conversations, mémoire et **droits NTFS** d'autrui).
+- **Secrets du `.env` scellés** (DPAPI **machine**) via `jade seal-env`, lancé
+  par l'installateur : le fichier ne livre plus les jetons en clair, tout en
+  restant déchiffrable par toutes les sessions de la machine. **ACL** du `.env`
+  restreinte aux administrateurs + SYSTEM (retrait du groupe *Users*).
+- **Journal sortant par utilisateur** : `outbound.jsonl` déplacé dans
+  `%LOCALAPPDATA%\Jade\logs` (un utilisateur RDS ne peut plus lire/falsifier les
+  extraits envoyés par les autres).
+- **Garde anti-DNS-rebinding** : l'API locale rejette (421) toute requête dont
+  l'en-tête `Host` n'est pas le loopback.
+- **Retour utilisateur par e-mail** (remplace l'intégration Resend de 1.5.0,
+  jamais publiée) : ouvre le **client e-mail par défaut** (mailto, multi-OS)
+  pré-rempli vers `feedback@example.com` et prépare un **zip de diagnostic** (journaux,
+  version, état — **sans aucun secret**) révélé dans l'explorateur à joindre au
+  message. Un `mailto:` ne pouvant pas attacher de fichier, le zip est fourni à
+  côté.
+- **Correctif** : l'endpoint `/api/open-url` masquait `openers.open_url`
+  (auto-appel récursif) → ouverture des liens web des sources cassée depuis
+  1.2.0. Renommé `open_url_route`.
+
+---
+
+## 1.5.0 — dev (non publiée) : réglages sans mot de passe (retour Resend, remplacé en 1.6.0)
 
 - ⭐ **Bouton « Donner mon avis »** (barre latérale) : le message part
   directement à `feedback@example.com` via l'**API Resend** (clé saisie à
