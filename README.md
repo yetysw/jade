@@ -5,7 +5,7 @@
 
   **Assistant documentaire d'entreprise, « local d'abord »**
 
-  ![Version](https://img.shields.io/badge/version-1.7.0-00357F)
+  ![Version](https://img.shields.io/badge/version-1.8.0-00357F)
   ![Plateforme](https://img.shields.io/badge/Windows-10%2F11-informational)
   ![UI](https://img.shields.io/badge/interface-Flutter%20native-blue)
   ![Licence](https://img.shields.io/badge/licence-Jade%20S%C3%A0rl-lightgrey)
@@ -97,7 +97,7 @@ HTTPS chiffré, vers le serveur d'inférence Jade (Ollama, via Cloudflare Tunnel
 
 ## Installation (poste client)
 
-Utiliser l'installateur `Jade-Setup-1.7.0.exe` (voir *Build* plus bas).
+Utiliser l'installateur `Jade-Setup-1.8.0.exe` (voir *Build* plus bas).
 **Aucun secret n'est embarqué dans l'installateur** : pendant l'installation,
 l'assistant demande les **identifiants d'accès Jade** (adresse du serveur LLM,
 jetons Cloudflare Access — un seul couple pour tous les services — éventuel
@@ -221,6 +221,69 @@ dernière release et compare la version (mise en cache 1 h, non bloquant).
   ```
 
 Dépôt privé : renseigner `GITEA_TOKEN` (jeton de lecture) dans le `.env`.
+
+## Licences (optionnel)
+
+Jade fonctionne **sans licence** : par défaut (`LICENSE_ENABLED=0`), le
+kill-switch est la **révocation du service token Cloudflare** du client
+(instantané). Le système de licences ajoute la gestion d'**abonnements**
+(prolonger / suspendre par client, mensuel/trimestriel) avec un message propre
+d'échéance côté application.
+
+**Comment ça marche.** Un petit serveur `licsrv` (FastAPI + SQLite), hébergé
+côté Jade **derrière Cloudflare Access** (comme le LLM/SearXNG — jamais ouvert à
+Internet), délivre à chaque client un **JWT Ed25519 court** que Jade vérifie
+**hors ligne** (clé publique embarquée) avec une période de **grâce** : si le
+serveur est momentanément injoignable, l'app continue de fonctionner. Aucune
+donnée client ne transite ; le serveur ne connaît que des identifiants opaques
+(aucune PII).
+
+### Mise en place (côté Jade, une fois)
+
+```bash
+# 1) sur le serveur (même VM que SearXNG possible)
+pip install -r licsrv/requirements.txt
+
+# 2) générer la paire de clés (affiche la clé PUBLIQUE à embarquer)
+python -m licsrv.keys      # clé privée -> licsrv/keys/ (jamais versionnée)
+
+# 3) lancer l'API (loopback) puis l'exposer via un Cloudflare Tunnel + Access
+uvicorn licsrv.app:app --host 127.0.0.1 --port 8790     # -> ex. license.example.com
+
+# 4) créer un service token Cloudflare Access DÉDIÉ au serveur de licences
+```
+
+Coller la **clé publique** de l'étape 2 dans `LICENSE_PUBLIC_KEY` (ou la mettre
+en défaut dans `ragagent/config.py` avant de builder le client).
+
+### Créer / gérer des clients (CLI locale sur le serveur)
+
+```bash
+python -m licsrv.manage add "Cabinet Durand" --plan monthly   # affiche la CLÉ une fois
+python -m licsrv.manage extend <id> --months 1                # « prolonger d'un mois »
+python -m licsrv.manage revoke <id>                           # suspendre
+python -m licsrv.manage list
+```
+
+### Activer côté client (dans le `.env` du poste)
+
+```ini
+LICENSE_ENABLED=1
+LICENSE_URL=https://license.example.com
+LICENSE_KEY=<la clé fournie par « add »>
+LICENSE_CF_ACCESS_CLIENT_ID=<service token dédié>
+LICENSE_CF_ACCESS_CLIENT_SECRET=<service token dédié>
+LICENSE_PUBLIC_KEY=<clé publique du serveur, ou laisser vide si mise en défaut au build>
+GRACE_DAYS=7
+```
+
+États possibles (visibles via `/api/license` et en bandeau dans l'app) :
+`off` (désactivé) · `active` · `grace` (serveur injoignable, l'app continue) ·
+`expired` / `suspended` (envoi de questions bloqué proprement, historique
+consultable). Détails de déploiement et de sauvegarde : `licsrv/README.md`.
+
+> Le serveur `licsrv` est **interne** : jamais livré aux clients ni embarqué dans
+> l'installateur. Sauvegarder `licenses.db` **et** la clé privée.
 
 ## Structure
 

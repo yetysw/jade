@@ -751,6 +751,44 @@ class _RowActions extends StatelessWidget {
   }
 }
 
+class _LicenseBanner extends StatelessWidget {
+  final LicenseInfo info;
+  const _LicenseBanner({required this.info});
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    final color = info.isBlocking ? jade.danger : jade.secondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: JadeSpace.md, vertical: JadeSpace.sm + 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: JadeRadius.all(JadeRadius.sm),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(info.isBlocking ? TablerIcons.alertTriangle : TablerIcons.alertCircle,
+              size: 15, color: color),
+          const SizedBox(width: JadeSpace.sm),
+          Expanded(
+            child: Text(
+              info.detail.isNotEmpty
+                  ? info.detail
+                  : (info.isBlocking
+                      ? 'Abonnement Jade à renouveler — contactez Jade.'
+                      : 'Vérification de licence indisponible.'),
+              style: JadeType.caption.copyWith(color: jade.body, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Footer extends StatelessWidget {
   final HomeScreenState state;
   const _Footer({required this.state});
@@ -763,6 +801,10 @@ class _Footer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (state.status?.license.showBanner == true) ...[
+            _LicenseBanner(info: state.status!.license),
+            const SizedBox(height: JadeSpace.sm + 2),
+          ],
           if (state.update?.showButton == true) ...[
             UpdateButton(api: state.api, info: state.update!),
             const SizedBox(height: JadeSpace.sm + 2),

@@ -166,6 +166,8 @@ def _cmd_ask(settings, question: str, dry_run: bool, as_json: bool) -> int:
 _SECRET_KEYS = (
     "CF_ACCESS_CLIENT_SECRET",
     "SEARXNG_CF_ACCESS_CLIENT_SECRET",
+    "LICENSE_CF_ACCESS_CLIENT_SECRET",
+    "LICENSE_KEY",
     "GITEA_TOKEN",
     "SETUP_PASSWORD",
 )

@@ -7,6 +7,31 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.8.0 — 🚧 dev : ⭐ Système de licences (optionnel)
+
+- ⭐ **Serveur de licences `licsrv/`** (interne, jamais livré) : FastAPI + SQLite,
+  **JWT Ed25519**, CLI d'admin (`add`/`extend`/`revoke`/`list`), secret client
+  haché (PBKDF2), **aucune PII**, réponse d'erreur constante (pas d'oracle). À
+  héberger derrière Cloudflare Access comme le LLM/SearXNG.
+- **Intégration client** (`ragagent/licensing.py`) : vérification de
+  l'abonnement au démarrage + périodique (toutes ~6 h), **non bloquante**,
+  **JWT vérifié hors ligne** (clé publique embarquée) avec **période de grâce**
+  configurable. États : off/active/grace/expired/suspended, exposés par
+  `/api/status` et `/api/license`. À l'expiration : envoi de questions **bloqué
+  proprement** (message « contactez Jade »), historique consultable. Bandeau
+  d'état dans l'application.
+- **Désactivé par défaut** (`LICENSE_ENABLED=0`) : aucune obligation de déployer
+  le serveur ; le kill-switch reste la révocation du service token Cloudflare par
+  client. Secrets licence scellés (DPAPI machine) comme les autres.
+- Documentation de mise en place complète : `README.md` (section Licences) +
+  `licsrv/README.md`.
+
+*RDS multi-utilisateur (décision produit) : un déploiement = une société →
+posture « statu quo + révocation CF » retenue ; le relais privilégié reste en
+réserve (documenté) si un besoin multi-tenant / conformité apparaît.*
+
+---
+
 ## 1.7.0 — 🚧 dev : ⭐ Durcissement sécurité (audit) + robustesse LLM
 
 Issu d'un audit par une équipe de 7 sous-agents, re-validé par des agents
