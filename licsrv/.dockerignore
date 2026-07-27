@@ -1,0 +1,10 @@
+# Ne JAMAIS embarquer la clé privée ni la base dans l'image : elles vivent dans
+# le volume /data. Exclure aussi les caches et artefacts locaux.
+keys/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+data/
+.env

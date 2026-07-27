@@ -10,4 +10,4 @@ Cloudflare par client — la licence gère le cycle commercial, pas la coercitio
 Ne fait PAS partie du package `ragagent` livré : à déployer séparément côté Jade.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

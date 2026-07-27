@@ -30,7 +30,9 @@ __pycache__/
 # script local de push (peut contenir un jeton) — jamais versionne
 push.bat
 
-# serveur de licences : cle privee + base (jamais versionnes)
+# serveur de licences : cle privee + base + volume docker + .env (jamais versionnes)
 licsrv/keys/
 licsrv/*.db
 licsrv/*.db-*
+licsrv/data/
+licsrv/.env

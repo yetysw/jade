@@ -1,0 +1,29 @@
+# Serveur de licences Jade — un conteneur, deux ports.
+#
+#   docker compose up -d --build
+#
+# - 8790 : API publique (POST /api/verify) que les postes clients joignent.
+#          À router derrière un Cloudflare Tunnel + Access (service token dédié).
+#          Publié ici sur toutes les interfaces ; restreindre via le tunnel/pare-feu.
+# - 8791 : web-UI d'administration. Publiée UNIQUEMENT sur 127.0.0.1 (locale).
+#          Accès distant : passer par un tunnel SSH (ssh -L 8791:127.0.0.1:8791 …).
+#
+# La base SQLite et la clé privée Ed25519 sont persistées dans ./data (hors image).
+
+services:
+  licsrv:
+    build: .
+    image: jade-licsrv
+    container_name: jade-licsrv
+    restart: unless-stopped
+    ports:
+      - "8790:8790"             # public (verify)
+      - "127.0.0.1:8791:8791"   # admin web-UI — LOCAL uniquement
+    volumes:
+      - ./data:/data            # licenses.db + keys/ persistants
+    environment:
+      # Protection facultative de la web-UI (recommandée) : définir dans .env
+      # (copier .env.example). Vide = pas de contrôle (port local uniquement).
+      - LICSRV_ADMIN_TOKEN=${LICSRV_ADMIN_TOKEN:-}
+      # Durée du bail JWT (jours) — le client tolère bail + grâce hors ligne.
+      - LICSRV_BAIL_DAYS=${LICSRV_BAIL_DAYS:-14}
