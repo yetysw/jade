@@ -7,6 +7,31 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.9.1 — 🚧 dev : robustesse et sécurité (audit multi-agents)
+
+Correctifs issus d'une passe d'équipe d'agents (security-watch, backend-rag,
+qa-tests, ui-flutter) sur les nouveautés 1.9.0.
+
+- **Sécurité** (audit `security-watch`) :
+  - Le **zip de diagnostic** (bouton « Retour ») n'embarque plus le `body` du
+    journal sortant (question + extraits de documents) : vue **caviardée**
+    (ts/méthode/url uniquement). `CF-Access-Client-Id` désormais masqué.
+  - **Sauvegarde `.jadebak`** (en clair) écrite par défaut sous `%LOCALAPPDATA%`
+    au lieu de `Documents` (évite la synchronisation OneDrive/DFS hors du poste).
+  - **licsrv** : l'app d'administration écoute sur `127.0.0.1` par défaut
+    (`LICSRV_ADMIN_HOST`) ; une exécution bare-metal n'expose plus l'admin par
+    accident. Risque résiduel DPAPI-machine sur RDS documenté.
+- **Robustesse** (`backend-rag`) :
+  - `prefs.json` : écriture **atomique** + verrou (plus de perte d'acceptation
+    CGU / onboarding sur crash ou écritures concurrentes).
+  - Restauration de sauvegarde **transactionnelle** (rollback) : une sauvegarde
+    corrompue ne laisse plus d'historique à moitié importé.
+  - Durées de licence bornées côté `licsrv` (plus d'`OverflowError`).
+- **Tests** (`qa-tests`) : +24 tests (round-trip sauvegarde/restauration,
+  écriture `.env`, documents légaux) → **76 tests** au total.
+- **Interface** (`ui-flutter`) : animation des points d'onboarding gatée par
+  `context.motion` (respect de « réduire les animations »).
+
 ## 1.9.0 — 🚧 dev : ⭐ Autonomie du poste (santé, sauvegarde, 1er lancement, réglages de connexion)
 
 - ⭐ **Panneau « État du système »** (réglages) + **bandeau d'alerte rouge**
