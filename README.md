@@ -380,6 +380,24 @@ installer/         script Inno Setup (assistant qui écrit le .env local)
 3. Conversations chiffrées au repos (DPAPI, clé liée au compte Windows).
 4. Le backend refuse de s'exposer au-delà de `127.0.0.1`.
 
+### Risque résiduel connu (RDS multi-utilisateurs)
+
+Les secrets du `.env` (service token Cloudflare, `LICENSE_KEY`, `GITEA_TOKEN`…)
+sont scellés en **DPAPI portée machine** : c'est nécessaire pour qu'un serveur RDS
+où le backend tourne sous chaque compte utilisateur puisse les lire. Conséquence
+assumée : **tout processus local de la machine peut les déchiffrer** (un
+utilisateur standard qui copie le `.env` et appelle `CryptUnprotectData` portée
+machine). Cela n'expose **pas** les documents d'un autre utilisateur, mais donne
+accès à la passerelle Cloudflare hors Jade. Mesures d'exploitation :
+
+- **Restreindre le service token Cloudflare** aux seuls hôtes Jade nécessaires
+  (`llm.example.com`, `search.example.com`, `license.example.com`) dans la policy Access.
+- **Le faire tourner régulièrement** et surveiller les usages hors-Jade côté
+  Cloudflare.
+- Sur un déploiement mono-poste (utilisateur = admin local), le risque est nul.
+- Durcissement fort (si exigé) : compte de service dédié + relais privilégié
+  (Piste 1, en réserve).
+
 ## Licence
 
 Logiciel interne Jade Sàrl. Tous droits réservés.
