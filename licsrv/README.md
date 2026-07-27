@@ -35,29 +35,66 @@ python -m licsrv.manage reactivate <id>
 python -m licsrv.manage list
 ```
 
-## 3) Lancer l'API (face client)
+## Déploiement recommandé : Docker (un conteneur, deux ports)
+
+Le conteneur lance **deux serveurs** dans un seul processus (`licsrv.serve`) :
+
+| Port | Rôle | Exposition |
+|------|------|-----------|
+| **8790** | API publique — `POST /api/verify` (les postes clients) | derrière **Cloudflare Tunnel + Access** |
+| **8791** | **Web-UI d'administration** + API de gestion | **local uniquement** (127.0.0.1) |
 
 ```bash
+cd licsrv
+# (facultatif mais recommandé) protéger la web-UI :
+#   copier .env.example en .env et definir LICSRV_ADMIN_TOKEN
+docker compose up -d --build
+```
+
+- La base `licenses.db` et la clé privée vivent dans `licsrv/data/` (volume `/data`),
+  **jamais dans l'image**. Générées automatiquement au premier lancement.
+- Récupérer la **clé publique** à embarquer côté client (`LICENSE_PUBLIC_KEY`) :
+  ```bash
+  docker compose exec licsrv python -m licsrv.keys
+  ```
+- **Web-UI** : `http://127.0.0.1:8791/`. Accès distant : tunnel SSH
+  `ssh -L 8791:127.0.0.1:8791 user@serveur`, puis ouvrir `http://127.0.0.1:8791`.
+- Exposer **seulement 8790** publiquement, via un Cloudflare Tunnel protégé par un
+  **service token Access dédié** (comme SearXNG). Ne JAMAIS exposer 8791.
+
+### Web-UI d'administration
+
+Une page unique, sans dépendance : lister les licences, en **créer** (la clé en
+clair s'affiche une fois), **prolonger** (+1 mois), **révoquer** / **réactiver**.
+C'est l'équivalent visuel de `licsrv.manage`. Cycle Odoo :
+facture émise → *Créer* ; renouvellement → *+1 mois* ; non-paiement → *Révoquer*.
+
+## Alternative sans Docker
+
+```bash
+python -m licsrv.serve      # lance les deux ports (8790 public, 8791 admin)
+# ou l'API publique seule :
 uvicorn licsrv.app:app --host 127.0.0.1 --port 8790
 ```
-Puis exposer `127.0.0.1:8790` via un **Cloudflare Tunnel protégé par Access**
-(service token), comme SearXNG. Seul `POST /api/verify` est utile côté client.
 
 ## Sécurité / exploitation
 
 - **Aucune PII** en base (juste un libellé libre). Le secret client est **haché**
   (PBKDF2) : une fuite de la base ne donne aucune clé utilisable.
-- Réponse d'erreur **constante** (`403 invalid`) → pas d'oracle d'énumération.
-- **CLI d'admin uniquement en local** (pas d'endpoint admin exposé).
-- **Sauvegarder** `licenses.db` **et** `keys/license_ed25519.pem` (perte de la clé
-  privée = toutes les licences à re-signer / re-déployer la publique).
-- Réglages via variables d'environnement : `LICSRV_DB`, `LICSRV_PRIVATE_KEY`,
-  `LICSRV_ISSUER`, `LICSRV_BAIL_DAYS` (défaut 14).
+- Réponse d'erreur **constante** (`403 invalid`) sur `/api/verify` → pas d'oracle
+  d'énumération.
+- **Web-UI d'admin uniquement en local** (port publié sur 127.0.0.1). Protection
+  facultative supplémentaire par `LICSRV_ADMIN_TOKEN` (en-tête `X-Admin-Token`,
+  la page le demande et le mémorise).
+- **Sauvegarder** `data/licenses.db` **et** `data/keys/license_ed25519.pem` (perte
+  de la clé privée = toutes les licences à re-signer / re-déployer la publique).
+- Variables d'environnement : `LICSRV_DB`, `LICSRV_PRIVATE_KEY`, `LICSRV_ISSUER`,
+  `LICSRV_BAIL_DAYS` (défaut 14), `LICSRV_PUBLIC_PORT` (8790), `LICSRV_ADMIN_PORT`
+  (8791), `LICSRV_ADMIN_TOKEN` (vide = pas de contrôle).
 
-## Intégration client (à faire, décisions requises)
+## Intégration client
 
-Module `ragagent/licensing.py` (calqué sur `updater.py`) : refresh threadé + cache
-+ vérif JWT hors ligne + grâce, branché dans `_background_loop`, exposé via
-`/api/status` + `/api/license`, blocage propre à l'expiration. Voir le plan de
-`architect-plan` et les décisions ouvertes (bail, grâce, blocage, cache, CF token
-dédié, télémétrie).
+Faite (Jade ≥ 1.8.0) : `ragagent/licensing.py` vérifie l'abonnement au démarrage +
+périodiquement, valide le JWT **hors ligne**, tolère les coupures (grâce), et
+expose l'état via `/api/status` + `/api/license`. Runbook d'exploitation complet
+(facturation manuelle Odoo) : [`docs/deploiement-licences.md`](../docs/deploiement-licences.md).
