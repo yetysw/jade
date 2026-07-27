@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
+import threading
 from pathlib import Path
 
 from platformdirs import user_config_dir
@@ -16,6 +19,10 @@ from platformdirs import user_config_dir
 log = logging.getLogger(__name__)
 
 _FILE = Path(user_config_dir("Jade", appauthor=False)) / "prefs.json"
+# Sérialise le cycle lecture-modification-écriture : deux endpoints FastAPI
+# exécutés en parallèle (threadpool) qui écrivent chacun une clé ne doivent pas
+# se relire mutuellement une base périmée et perdre l'une des deux écritures.
+_LOCK = threading.Lock()
 
 
 def _load() -> dict:
@@ -48,9 +55,25 @@ def set_str(name: str, value: str) -> None:
 
 def _write(name: str, value: object) -> None:
     try:
-        data = _load()
-        data[name] = value
-        _FILE.parent.mkdir(parents=True, exist_ok=True)
-        _FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        with _LOCK:
+            data = _load()
+            data[name] = value
+            _FILE.parent.mkdir(parents=True, exist_ok=True)
+            # Écriture atomique : on écrit un fichier temporaire complet puis on
+            # le renomme (os.replace est atomique, y compris sur Windows). Un
+            # arrêt brutal en cours d'écriture ne peut donc pas laisser un
+            # prefs.json tronqué qui ferait tout perdre (CGU acceptées, etc.).
+            fd, tmp = tempfile.mkstemp(
+                dir=str(_FILE.parent), prefix=".prefs-", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh, ensure_ascii=False)
+                os.replace(tmp, _FILE)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
     except OSError as e:
         log.warning("Écriture de la préférence « %s » échouée : %s", name, e)
