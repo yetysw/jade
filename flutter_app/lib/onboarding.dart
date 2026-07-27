@@ -517,7 +517,8 @@ class _OnboardingState extends State<_Onboarding> {
       children: List.generate(_last + 1, (i) {
         final active = i == _step;
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: context.motion(const Duration(milliseconds: 200)),
+          curve: Curves.easeOutCubic,
           margin: const EdgeInsets.symmetric(horizontal: JadeSpace.xs),
           width: active ? 20 : 8,
           height: 8,
