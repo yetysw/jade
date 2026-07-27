@@ -852,11 +852,14 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
             return []
 
     def _default_backup_dir() -> Path:
-        """Dossier de sauvegarde par défaut : Documents de l'utilisateur (facile à
-        retrouver pour migrer), sinon le dossier de données par utilisateur."""
-        docs = Path.home() / "Documents"
-        base = docs if docs.is_dir() else settings.user_data_dir
-        return base / "Jade-sauvegardes"
+        """Dossier de sauvegarde par défaut : sous %LOCALAPPDATA% (par utilisateur,
+        NON itinérant). On évite volontairement « Documents », souvent redirigé
+        vers OneDrive/DFS en entreprise : la sauvegarde `.jadebak` étant en clair
+        (déchiffrée pour la portabilité), elle ne doit pas être synchronisée hors
+        du poste automatiquement. L'utilisateur peut toujours choisir une autre
+        destination (clé USB, partage) pour migrer ; le fichier lui est révélé
+        dans l'explorateur."""
+        return settings.user_data_dir / "sauvegardes"
 
     def _health() -> dict:
         """État de santé synthétique pour l'auto-diagnostic (bandeau + panneau
@@ -1333,10 +1336,35 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
 
     # -------------------------------------------------------- retour utilisateur
 
+    def _redacted_outbound() -> str:
+        """Journal sortant CAVIARDÉ pour le zip de support : ne conserve que les
+        métadonnées (horodatage, méthode, URL) de chaque appel. Le champ `body`
+        du journal contient la question ET les extraits de documents envoyés au
+        LLM — il ne doit JAMAIS partir vers le support. Cette vue prouve quels
+        services ont été appelés et quand, sans exposer le contenu."""
+        lines: list[str] = []
+        try:
+            with settings.outbound_log.open(encoding="utf-8") as f:
+                for raw in f:
+                    raw = raw.strip()
+                    if not raw:
+                        continue
+                    try:
+                        rec = json.loads(raw)
+                        lines.append(json.dumps(
+                            {"ts": rec.get("ts"), "method": rec.get("method"),
+                             "url": rec.get("url")}, ensure_ascii=False))
+                    except ValueError:
+                        continue  # ligne illisible : ignorée (jamais recopiée telle quelle)
+        except OSError:
+            pass
+        return "\n".join(lines)
+
     def _diagnostic_zip() -> Path:
-        """Assemble un zip de diagnostic pour le support : journaux (ceux de
-        l'utilisateur + journal applicatif), état de l'application et réglages
-        NON sensibles. Aucun secret, aucun contenu de conversation."""
+        """Assemble un zip de diagnostic pour le support : état de l'application,
+        journal applicatif, et un journal des appels sortants CAVIARDÉ (métadonnées
+        seulement). Aucun secret ; aucun extrait de document ni contenu de
+        conversation (le `body` du journal sortant est retiré, cf. _redacted_outbound)."""
         import zipfile
         from .. import __version__
 
@@ -1361,12 +1389,9 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
         }
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("etat.json", json.dumps(info, ensure_ascii=False, indent=2))
-            candidates = [
-                settings.outbound_log,                    # sortant (par utilisateur)
-                settings.log_dir / "jade.log",            # journal applicatif
-                settings.log_dir / "jade.log.1",
-            ]
-            for f in candidates:
+            # appels sortants : version caviardée (jamais le body/les extraits)
+            z.writestr("logs/outbound-metadonnees.jsonl", _redacted_outbound())
+            for f in (settings.log_dir / "jade.log", settings.log_dir / "jade.log.1"):
                 try:
                     if f.exists():
                         z.write(f, f"logs/{f.name}")

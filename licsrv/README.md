@@ -88,9 +88,15 @@ uvicorn licsrv.app:app --host 127.0.0.1 --port 8790
   la page le demande et le mémorise).
 - **Sauvegarder** `data/licenses.db` **et** `data/keys/license_ed25519.pem` (perte
   de la clé privée = toutes les licences à re-signer / re-déployer la publique).
+- L'app admin écoute par défaut sur **`127.0.0.1`** (variable `LICSRV_ADMIN_HOST`) :
+  une exécution **bare-metal** n'expose donc jamais l'admin au réseau par accident.
+  L'image Docker force `LICSRV_ADMIN_HOST=0.0.0.0` (nécessaire au forwarding), et
+  l'exposition reste bornée par le mapping hôte `127.0.0.1:8791:8791` du compose.
 - Variables d'environnement : `LICSRV_DB`, `LICSRV_PRIVATE_KEY`, `LICSRV_ISSUER`,
   `LICSRV_BAIL_DAYS` (défaut 14), `LICSRV_PUBLIC_PORT` (8790), `LICSRV_ADMIN_PORT`
-  (8791), `LICSRV_ADMIN_TOKEN` (vide = pas de contrôle).
+  (8791), `LICSRV_PUBLIC_HOST` (défaut `0.0.0.0`), `LICSRV_ADMIN_HOST` (défaut
+  `127.0.0.1`), `LICSRV_ADMIN_TOKEN` (vide = pas de contrôle ; recommandé si l'admin
+  n'est pas strictement en loopback).
 
 ## Intégration client
 

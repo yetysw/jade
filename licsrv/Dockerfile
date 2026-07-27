@@ -18,6 +18,10 @@ ENV LICSRV_DB=/data/licenses.db \
     LICSRV_PRIVATE_KEY=/data/keys/license_ed25519.pem \
     LICSRV_PUBLIC_PORT=8790 \
     LICSRV_ADMIN_PORT=8791 \
+    # Dans le conteneur, l'admin DOIT ecouter sur 0.0.0.0 pour que le forwarding
+    # Docker l'atteigne ; l'exposition reste bornee par le mapping hote
+    # "127.0.0.1:8791:8791" du docker-compose. Ne jamais publier ce port ailleurs.
+    LICSRV_ADMIN_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8790 8791
