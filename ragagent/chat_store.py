@@ -76,6 +76,16 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _as_int(value: object, default: int = 0) -> int:
+    """Entier robuste pour l'import : une valeur absente ou corrompue dans une
+    sauvegarde (éditée à la main, tronquée) retombe sur `default` plutôt que de
+    faire échouer toute la migration."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class ChatStore:
     def __init__(self, db_path: Path):
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -392,64 +402,74 @@ class ChatStore:
             raise ValueError("Fichier de sauvegarde invalide.")
         n_folders = n_convs = n_msgs = 0
         with self._lock:
-            existing_folders = {
-                r[0] for r in self._con.execute("SELECT id FROM folders").fetchall()
-            }
-            for f in data.get("folders", []):
-                fid = f.get("id")
-                if not fid or fid in existing_folders:
-                    continue
-                self._con.execute(
-                    "INSERT INTO folders (id, name, created_at) VALUES (?, ?, ?)",
-                    (fid, str(f.get("name", ""))[:50], f.get("created_at") or _now()),
-                )
-                existing_folders.add(fid)
-                n_folders += 1
-
-            existing_convs = {
-                r[0] for r in self._con.execute("SELECT id FROM conversations").fetchall()
-            }
-            for c in data.get("conversations", []):
-                cid = c.get("id")
-                if not cid or cid in existing_convs:
-                    continue
-                # un dossier référencé mais absent -> conversation non classée
-                folder_id = c.get("folder_id")
-                if folder_id and folder_id not in existing_folders:
-                    folder_id = None
-                self._con.execute(
-                    "INSERT INTO conversations "
-                    "(id, title, created_at, updated_at, pinned, archived, folder_id) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        cid, _enc(str(c.get("title", DEFAULT_TITLE))[:60]),
-                        c.get("created_at") or _now(), c.get("updated_at") or _now(),
-                        int(c.get("pinned", 0)), int(c.get("archived", 0)), folder_id,
-                    ),
-                )
-                existing_convs.add(cid)
-                n_convs += 1
-                for m in c.get("messages", []):
-                    role = m.get("role")
-                    if role not in ("user", "assistant"):
+            # Transaction atomique : au moindre incident (sauvegarde partiellement
+            # corrompue, erreur SQLite en cours de boucle), on annule TOUT — sans
+            # rollback explicite, les insertions déjà exécutées mais non validées
+            # seraient publiées par le prochain commit d'une autre opération, ce
+            # qui produirait un import à moitié appliqué.
+            try:
+                existing_folders = {
+                    r[0] for r in self._con.execute("SELECT id FROM folders").fetchall()
+                }
+                for f in data.get("folders", []):
+                    fid = f.get("id")
+                    if not fid or fid in existing_folders:
                         continue
-                    sources = m.get("sources")
-                    attachments = m.get("attachments")
-                    timings = m.get("timings")
                     self._con.execute(
-                        "INSERT INTO messages "
-                        "(conv_id, role, content, sources, timings, attachments, created_at) "
+                        "INSERT INTO folders (id, name, created_at) VALUES (?, ?, ?)",
+                        (fid, str(f.get("name", ""))[:50], f.get("created_at") or _now()),
+                    )
+                    existing_folders.add(fid)
+                    n_folders += 1
+
+                existing_convs = {
+                    r[0] for r in self._con.execute("SELECT id FROM conversations").fetchall()
+                }
+                for c in data.get("conversations", []):
+                    cid = c.get("id")
+                    if not cid or cid in existing_convs:
+                        continue
+                    # un dossier référencé mais absent -> conversation non classée
+                    folder_id = c.get("folder_id")
+                    if folder_id and folder_id not in existing_folders:
+                        folder_id = None
+                    self._con.execute(
+                        "INSERT INTO conversations "
+                        "(id, title, created_at, updated_at, pinned, archived, folder_id) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (
-                            cid, role, _enc(str(m.get("content", ""))),
-                            _enc(json.dumps(sources, ensure_ascii=False)) if sources else None,
-                            json.dumps(timings) if timings else None,
-                            _enc(json.dumps(attachments, ensure_ascii=False)) if attachments else None,
-                            m.get("created_at") or _now(),
+                            cid, _enc(str(c.get("title", DEFAULT_TITLE))[:60]),
+                            c.get("created_at") or _now(), c.get("updated_at") or _now(),
+                            _as_int(c.get("pinned", 0)), _as_int(c.get("archived", 0)),
+                            folder_id,
                         ),
                     )
-                    n_msgs += 1
-            self._con.commit()
+                    existing_convs.add(cid)
+                    n_convs += 1
+                    for m in c.get("messages", []):
+                        role = m.get("role")
+                        if role not in ("user", "assistant"):
+                            continue
+                        sources = m.get("sources")
+                        attachments = m.get("attachments")
+                        timings = m.get("timings")
+                        self._con.execute(
+                            "INSERT INTO messages "
+                            "(conv_id, role, content, sources, timings, attachments, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                cid, role, _enc(str(m.get("content", ""))),
+                                _enc(json.dumps(sources, ensure_ascii=False)) if sources else None,
+                                json.dumps(timings) if timings else None,
+                                _enc(json.dumps(attachments, ensure_ascii=False)) if attachments else None,
+                                m.get("created_at") or _now(),
+                            ),
+                        )
+                        n_msgs += 1
+                self._con.commit()
+            except Exception:
+                self._con.rollback()
+                raise
         return {"folders": n_folders, "conversations": n_convs, "messages": n_msgs}
 
     def history(self, cid: str, limit: int = 8) -> list[dict]:

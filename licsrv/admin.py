@@ -32,6 +32,15 @@ def require_admin(x_admin_token: str = Header(default="")) -> None:
         raise HTTPException(401, "unauthorized")
 
 
+# Borne haute des durées : 1200 mois = 100 ans. Au-delà, timedelta(days=30*n)
+# déclencherait un OverflowError (erreur 500 brute) sur une saisie absurde.
+_MAX_MONTHS = 1200
+
+
+def _clamp_months(months: int) -> int:
+    return min(max(1, months), _MAX_MONTHS)
+
+
 class CreateRequest(BaseModel):
     label: str
     plan: str = "monthly"
@@ -55,7 +64,7 @@ def create_license(req: CreateRequest):
     if not label:
         raise HTTPException(400, "Le libellé est requis.")
     try:
-        key = db.create_license(label, req.plan, max(1, req.months))
+        key = db.create_license(label, req.plan, _clamp_months(req.months))
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"key": key, "id": key.split(".")[0]}
@@ -63,7 +72,7 @@ def create_license(req: CreateRequest):
 
 @app.post("/api/licenses/{cid}/extend", dependencies=[Depends(require_admin)])
 def extend_license(cid: str, req: ExtendRequest):
-    if not db.extend(cid, max(1, req.months)):
+    if not db.extend(cid, _clamp_months(req.months)):
         raise HTTPException(404, "Licence introuvable.")
     return {"ok": True}
 
