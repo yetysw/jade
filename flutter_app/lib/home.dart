@@ -41,6 +41,11 @@ class HomeScreenState extends State<HomeScreen> {
   String? currentConv;
   final GlobalKey<ChatViewState> chatKey = GlobalKey();
 
+  /// Vrai pendant le glisser-déposer d'une conversation dans la barre
+  /// latérale : force l'affichage des en-têtes « Épinglées »/« Conversations »
+  /// même vides, pour qu'elles restent des cibles de dépôt valides.
+  bool _draggingConversation = false;
+
   // panneau sources
   List<Source>? panelSources;
   int? panelHighlight;
@@ -215,6 +220,37 @@ class HomeScreenState extends State<HomeScreen> {
     await api.moveConversation(c.id, folderId);
     if (folderId != null) openFolders.add(folderId);
     await refreshConversations();
+  }
+
+  /// Épingle une conversation déposée (glisser-déposer) sur la section
+  /// « Épinglées » ; sans effet si elle l'est déjà.
+  Future<void> _pinConversation(Conversation c) async {
+    if (c.pinned) return;
+    await api.setFlag(c.id, 'pinned', true);
+    await refreshConversations();
+  }
+
+  /// Retire une conversation déposée (glisser-déposer) sur la section
+  /// « Conversations » de son dossier et/ou la désépingle, selon ce qui
+  /// s'applique.
+  Future<void> _unassign(Conversation c) async {
+    if (c.folderId != null) await api.moveConversation(c.id, null);
+    if (c.pinned) await api.setFlag(c.id, 'pinned', false);
+    await refreshConversations();
+  }
+
+  /// Bascule l'état plié/déplié d'un dossier.
+  void _toggleFolder(String id) {
+    setState(() {
+      if (!openFolders.remove(id)) openFolders.add(id);
+    });
+  }
+
+  /// Suivi de l'état de glisser-déposer d'une conversation — voir
+  /// [_draggingConversation].
+  void _setDragging(bool v) {
+    if (_draggingConversation == v) return;
+    setState(() => _draggingConversation = v);
   }
 
   Future<void> _renameFolderDialog(Folder f) async {
@@ -420,32 +456,13 @@ class _Sidebar extends StatelessWidget {
       dense: true,
     ));
 
-    // dossiers — clic droit pour renommer/supprimer (sinon jamais accessible)
+    // dossiers — clic droit pour renommer/supprimer, glisser-déposer une
+    // conversation pour l'y classer (sinon jamais accessible)
     for (final f in state.folders) {
       final inFolder = convs.where((c) => c.folderId == f.id).toList();
       final open = state.openFolders.contains(f.id);
-      widgets.add(GestureDetector(
-        onSecondaryTapUp: (d) =>
-            _showFolderMenu(context, state, f, d.globalPosition),
-        child: _NavTile(
-          leading: Icon(
-              open ? TablerIcons.chevronDown : TablerIcons.chevronRight,
-              size: 16,
-              color: jade.faint),
-          icon: TablerIcons.folder,
-          iconColor: jade.secondary,
-          label: f.name,
-          bold: true,
-          trailing: _CountBadge(inFolder.length),
-          onTap: () {
-            open
-                ? state.openFolders.remove(f.id)
-                : state.openFolders.add(f.id);
-            // ignore: invalid_use_of_protected_member
-            state.setState(() {});
-          },
-        ),
-      ));
+      widgets.add(_FolderTile(
+          state: state, folder: f, open: open, count: inFolder.length));
       if (open) {
         widgets.addAll(inFolder.map((c) => Padding(
               padding: const EdgeInsets.only(left: JadeSpace.lg),
@@ -454,17 +471,26 @@ class _Sidebar extends StatelessWidget {
       }
     }
 
-    // épinglées puis le reste (hors dossiers)
+    // épinglées puis le reste (hors dossiers) — les en-têtes restent visibles
+    // (même vides) pendant un glisser-déposer, pour rester des cibles valides
     final loose = convs.where((c) =>
         c.folderId == null || !state.folders.any((f) => f.id == c.folderId));
     final pinned = loose.where((c) => c.pinned).toList();
     final others = loose.where((c) => !c.pinned).toList();
-    if (pinned.isNotEmpty) {
-      widgets.add(const SectionLabel('Épinglées'));
+    if (pinned.isNotEmpty || state._draggingConversation) {
+      widgets.add(_SectionDropTarget(
+        text: 'Épinglées',
+        accepts: (c) => !c.pinned,
+        onDrop: state._pinConversation,
+      ));
       widgets.addAll(pinned.map((c) => _ConvRow(state: state, conv: c)));
     }
-    if (others.isNotEmpty) {
-      widgets.add(const SectionLabel('Conversations'));
+    if (others.isNotEmpty || state._draggingConversation) {
+      widgets.add(_SectionDropTarget(
+        text: 'Conversations',
+        accepts: (c) => c.folderId != null || c.pinned,
+        onDrop: state._unassign,
+      ));
       widgets.addAll(others.map((c) => _ConvRow(state: state, conv: c)));
     }
     if (convs.isEmpty) {
@@ -623,6 +649,103 @@ class _CountBadge extends StatelessWidget {
   }
 }
 
+/// Ligne d'un dossier : déplier/replier au clic, menu contextuel au clic
+/// droit, et cible de glisser-déposer pour y classer une conversation (sans
+/// effet si elle s'y trouve déjà).
+class _FolderTile extends StatelessWidget {
+  final HomeScreenState state;
+  final Folder folder;
+  final bool open;
+  final int count;
+  const _FolderTile({
+    required this.state,
+    required this.folder,
+    required this.open,
+    required this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    return DragTarget<Conversation>(
+      onWillAcceptWithDetails: (d) => d.data.folderId != folder.id,
+      onAcceptWithDetails: (d) => state._moveToFolder(d.data, folder.id),
+      builder: (context, candidates, rejected) {
+        final hovering = candidates.isNotEmpty;
+        return MouseRegion(
+          cursor: hovering ? SystemMouseCursors.grabbing : MouseCursor.defer,
+          child: GestureDetector(
+            onSecondaryTapUp: (d) =>
+                _showFolderMenu(context, state, folder, d.globalPosition),
+            child: AnimatedContainer(
+              duration: context.motion(const Duration(milliseconds: 130)),
+              decoration: BoxDecoration(
+                color: hovering ? jade.primaryContainer : Colors.transparent,
+                borderRadius: JadeRadius.all(JadeRadius.md),
+                border: Border.all(
+                    color: hovering ? jade.primary : Colors.transparent,
+                    width: 1.5),
+              ),
+              child: _NavTile(
+                leading: Icon(
+                    open ? TablerIcons.chevronDown : TablerIcons.chevronRight,
+                    size: 16,
+                    color: jade.faint),
+                icon: TablerIcons.folder,
+                iconColor: jade.secondary,
+                label: folder.name,
+                bold: true,
+                trailing: _CountBadge(count),
+                onTap: () => state._toggleFolder(folder.id),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// En-tête de section (« Épinglées » / « Conversations ») servant aussi de
+/// cible de glisser-déposer : y déposer une conversation applique [onDrop]
+/// (épingler, ou retirer du dossier/désépingler selon la section).
+class _SectionDropTarget extends StatelessWidget {
+  final String text;
+  final bool Function(Conversation) accepts;
+  final void Function(Conversation) onDrop;
+  const _SectionDropTarget({
+    required this.text,
+    required this.accepts,
+    required this.onDrop,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    return DragTarget<Conversation>(
+      onWillAcceptWithDetails: (d) => accepts(d.data),
+      onAcceptWithDetails: (d) => onDrop(d.data),
+      builder: (context, candidates, rejected) {
+        final hovering = candidates.isNotEmpty;
+        return MouseRegion(
+          cursor: hovering ? SystemMouseCursors.grabbing : MouseCursor.defer,
+          child: AnimatedContainer(
+            duration: context.motion(const Duration(milliseconds: 130)),
+            decoration: BoxDecoration(
+              color: hovering ? jade.primaryContainer : Colors.transparent,
+              borderRadius: JadeRadius.all(JadeRadius.sm),
+              border: Border.all(
+                  color: hovering ? jade.primary : Colors.transparent,
+                  width: 1.5),
+            ),
+            child: SectionLabel(text),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Tuile de navigation générique — gère survol + focus clavier via InkWell.
 class _NavTile extends StatelessWidget {
   final IconData icon;
@@ -700,7 +823,7 @@ class _ConvRowState extends State<_ConvRow> {
     final jade = context.jade;
     final c = widget.conv;
     final active = widget.state.currentConv == c.id;
-    return MouseRegion(
+    final row = MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
@@ -741,6 +864,63 @@ class _ConvRowState extends State<_ConvRow> {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+
+    // glisser-déposer : appui long puis déplacement (le clic simple reste
+    // l'ouverture, le clic droit reste le menu — LongPressDraggable ne réagit
+    // qu'au bouton primaire et n'intercepte ni l'un ni l'autre).
+    return LongPressDraggable<Conversation>(
+      data: c,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      onDragStarted: () => widget.state._setDragging(true),
+      onDragEnd: (_) => widget.state._setDragging(false),
+      onDraggableCanceled: (_, __) => widget.state._setDragging(false),
+      feedback: _ConvDragFeedback(conv: c),
+      childWhenDragging: Opacity(opacity: 0.35, child: row),
+      child: row,
+    );
+  }
+}
+
+/// Aperçu flottant affiché sous le curseur pendant le glisser-déposer d'une
+/// conversation.
+class _ConvDragFeedback extends StatelessWidget {
+  final Conversation conv;
+  const _ConvDragFeedback({required this.conv});
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    return Material(
+      color: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: JadeSpace.md, vertical: JadeSpace.sm + 1),
+          decoration: BoxDecoration(
+            color: jade.card,
+            borderRadius: JadeRadius.all(JadeRadius.md),
+            border: Border.all(color: jade.borderStrong),
+            boxShadow: JadeElevation.lift(context),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(conv.pinned ? TablerIcons.pinned : TablerIcons.messages,
+                  size: 14, color: jade.secondary),
+              const SizedBox(width: JadeSpace.sm),
+              Flexible(
+                child: Text(conv.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: JadeType.label.copyWith(
+                        color: jade.text, fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
         ),
       ),
