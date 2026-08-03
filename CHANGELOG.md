@@ -7,6 +7,26 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.10.1 — 🚧 dev : correctif bloquant au démarrage après installation
+
+- 🔴 **L'application ne démarrait plus après installation** (`PermissionError` sur
+  `C:\Program Files\Jade\backend\.env`). L'installateur posait une ACL limitée à
+  `SYSTEM` + `Administrateurs` ; or le backend est lancé **sans élévation** et,
+  sous UAC, même un compte administrateur reçoit un **jeton filtré** qui
+  n'appartient pas à ce groupe — la configuration était donc illisible. Le groupe
+  `Utilisateurs` obtient désormais la modification (lecture indispensable au
+  démarrage, écriture nécessaire à l'édition des identifiants depuis les
+  réglages). Les secrets restent scellés par DPAPI ; le durcissement RDS
+  (compte de service dédié) reste à faire avant tout déploiement multi-utilisateur.
+- **Interface** : les trois cartes de mode ont désormais une **taille identique**
+  (largeur et hauteur fixes, plus de titre qui passe à la ligne ni de troncature
+  au milieu d'une phrase) ; **glisser-déposer** des conversations vers un dossier,
+  vers « Épinglées » ou vers « Conversations » (avec surbrillance de la cible),
+  en plus des icônes de survol et du menu clic droit déjà présents.
+- **Build** : chemin du backend paramétrable (`/DBackendDir`) pour contourner un
+  verrou Windows sur `dist\Jade` ; script de publication des releases nettoyé
+  (un caractère non-ASCII cassait tout le parsing sous PowerShell 5.1).
+
 ## 1.10.0 — 🚧 dev : ⭐ Jade sait qui elle est, modes de recherche et réponses rapides
 
 - ⭐ **Identité de l'assistant** : Jade sait désormais qu'elle s'appelle Jade,

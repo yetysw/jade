@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define AppName "Jade"
-#define AppVersion "1.10.0"
+#define AppVersion "1.10.1"
 #define AppPublisher "Jade Sàrl"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
@@ -243,16 +243,31 @@ begin
   SaveStringToFile(ExpandConstant('{app}\backend\.env'), S, False);
 end;
 
-{ Cree le .env VIDE puis pose une ACL restrictive (Administrateurs + SYSTEM,
-  heritage retire) AVANT d'y ecrire le moindre secret : ainsi il n'existe jamais
-  de fenetre ou le .env en clair est lisible par le groupe Users (ACL heritee de
-  Program Files). Le code retour d'icacls est verifie et signale.
-  LIMITE RDS connue : cette ACL empeche un utilisateur STANDARD de lire le .env
-  -> convient a un poste client (utilisateur = admin local), mais sur un serveur
-  RDS multi-utilisateurs le backend tourne sous chaque utilisateur standard et
-  ne pourrait alors PAS lire le .env. Le durcissement correct pour RDS est un
-  compte de service dedie (a mettre en place avant tout deploiement RDS). Le
-  controle de fond reste la revocation du service token Cloudflare par client. }
+{ Cree le .env VIDE puis pose une ACL explicite (heritage retire) AVANT d'y
+  ecrire le moindre secret : il n'existe ainsi jamais de fenetre ou le fichier
+  herite d'une ACL trop large. Le code retour d'icacls est verifie et signale.
+
+  DROITS ACCORDES :
+    SYSTEM (S-1-5-18)          : controle total
+    Administrateurs (S-1-5-32-544) : controle total
+    Utilisateurs (S-1-5-32-545)    : modification (M)
+
+  POURQUOI « Utilisateurs » et pas seulement les administrateurs : le backend
+  est lance SANS ELEVATION par l'application. Sous UAC, meme un compte
+  administrateur obtient un jeton FILTRE qui n'appartient pas au groupe
+  Administrateurs -> une ACL limitee a S-1-5-18 + S-1-5-32-544 rend le .env
+  ILLISIBLE par le backend, qui plante au demarrage (PermissionError sur
+  load_dotenv). La lecture est donc indispensable ; l'ecriture l'est aussi pour
+  l'edition des identifiants depuis les reglages (POST /api/config).
+
+  CE QUE CELA COUTE : sur un poste MONO-UTILISATEUR (cas de deploiement actuel),
+  rien — l'utilisateur est de toute facon maitre de sa machine. Sur un serveur
+  RDS MULTI-UTILISATEURS, un utilisateur standard pourrait lire et surtout
+  MODIFIER la configuration (ex. rediriger OLLAMA_URL). Les secrets restent
+  scelles par DPAPI machine, mais le durcissement correct pour RDS reste un
+  compte de service dedie avec un .env qui lui est propre : a mettre en place
+  AVANT tout deploiement RDS. Le controle de fond demeure la revocation du
+  service token Cloudflare par client. }
 procedure PrepEnvAcl;
 var
   envPath: String;
@@ -261,7 +276,7 @@ begin
   envPath := ExpandConstant('{app}\backend\.env');
   SaveStringToFile(envPath, '', False);  { cree le fichier vide }
   if not Exec(ExpandConstant('{sys}\icacls.exe'),
-      '"' + envPath + '" /inheritance:r /grant:r "*S-1-5-18:F" "*S-1-5-32-544:F"',
+      '"' + envPath + '" /inheritance:r /grant:r "*S-1-5-18:F" "*S-1-5-32-544:F" "*S-1-5-32-545:M"',
       '', SW_HIDE, ewWaitUntilTerminated, rc) or (rc <> 0) then
     MsgBox('Avertissement : le verrouillage des droits du fichier de '
       + 'configuration a echoue (code ' + IntToStr(rc) + '). Les identifiants '
