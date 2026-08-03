@@ -7,6 +7,37 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
+## 1.10.0 — 🚧 dev : ⭐ Jade sait qui elle est, modes de recherche et réponses rapides
+
+- ⭐ **Identité de l'assistant** : Jade sait désormais qu'elle s'appelle Jade,
+  qu'elle est éditée par Jade Sàrl et qu'elle fonctionne en local. L'identité est
+  assemblée en un point unique (`rag.system_prompt`) et injectée dans tous les
+  chemins où elle s'adresse à l'utilisateur (documentaire, web, général,
+  smalltalk) — sans toucher aux appels utilitaires (routeur, titres, mémoire).
+- ⭐ **Nom de l'utilisateur** : saisie facultative au premier lancement
+  (« Comment souhaitez-vous que Jade vous appelle ? ») et modifiable dans les
+  réglages. Endpoints `GET`/`POST` `/api/profile` ; le nom prime partout sur le
+  compte Windows.
+  - **Correction de la cause du « Leo »** : faute d'identité, l'assistant avait
+    halluciné un prénom, et l'extraction de mémoire avait enregistré ses propres
+    phrases (« Je m'appelle Léo ») comme des faits **sur l'utilisateur**.
+    L'extraction refuse désormais les propos de l'assistant à la 1re personne, et
+    le nom déclaré fait foi sur tout fait mémorisé.
+- ⭐ **Modes de recherche explicites** : les trois cartes d'accueil ne lancent
+  plus de question pré-remplie — elles **sélectionnent un mode**
+  (`documents` / `web` / `créer un fichier`), et l'utilisateur écrit sa propre
+  question. Le mode reste visible et modifiable en cours de conversation, avec
+  retour au mode automatique en un clic. Champ `mode` sur `/ask`.
+- ⭐ **Réponses rapides** : quand Jade pose une question, l'interface propose
+  jusqu'à 3 réponses cliquables (générées par le petit modèle), le champ de
+  saisie restant disponible pour répondre librement. Événement SSE `replies`.
+- **Dossiers de conversations** : deux correctifs — déplacer une conversation
+  vers un dossier **fermé** la faisait disparaître silencieusement ; **renommer
+  et supprimer un dossier** étaient impossibles (fonctions non reliées à
+  l'interface). Ajout d'un **menu au clic droit** sur les conversations et les
+  dossiers.
+- **Tests** : 76 → **114**.
+
 ## 1.9.1 — 🚧 dev : robustesse et sécurité (audit multi-agents)
 
 Correctifs issus d'une passe d'équipe d'agents (security-watch, backend-rag,

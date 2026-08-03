@@ -5,7 +5,7 @@
 
   **Assistant documentaire d'entreprise, « local d'abord »**
 
-  ![Version](https://img.shields.io/badge/version-1.9.1-00357F)
+  ![Version](https://img.shields.io/badge/version-1.10.0-00357F)
   ![Plateforme](https://img.shields.io/badge/Windows-10%2F11-informational)
   ![UI](https://img.shields.io/badge/interface-Flutter%20native-blue)
   ![Licence](https://img.shields.io/badge/licence-Jade%20S%C3%A0rl-lightgrey)
@@ -84,7 +84,7 @@ flowchart TB
 
 | Couche | Technologie | Version |
 |--------|-------------|---------|
-| Application | Jade | 1.9.1 |
+| Application | Jade | 1.10.0 |
 | Interface | Flutter (Dart SDK) / `http` / `flutter_markdown` | SDK `^3.12.2` / 1.2 / 0.7 |
 | Backend | Python | >= 3.12 |
 | API locale | FastAPI / Uvicorn | 0.139.0 / 0.49.0 |
@@ -111,7 +111,7 @@ flowchart TB
 
 ## Installation (poste client)
 
-Utiliser l'installateur `Jade-Setup-1.9.1.exe` (voir *Build* plus bas).
+Utiliser l'installateur `Jade-Setup-1.10.0.exe` (voir *Build* plus bas).
 **Aucun secret n'est embarqué dans l'installateur** : pendant l'installation,
 l'assistant demande les **identifiants d'accès Jade** (adresse du serveur LLM,
 jetons Cloudflare Access — un seul couple pour tous les services — éventuel
