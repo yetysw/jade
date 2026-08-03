@@ -277,8 +277,9 @@ class BackupRequest(BaseModel):
 
 
 # Version des documents légaux (CGU + confidentialité). À incrémenter quand le
-# contenu change : l'utilisateur devra ré-accepter la nouvelle version.
-LEGAL_VERSION = "2026-07"
+# contenu change : l'utilisateur devra ré-accepter la nouvelle version. Doit
+# correspondre à la « Version du document » indiquée dans docs/CGU.md.
+LEGAL_VERSION = "1.0"
 
 
 def _sse(payload: dict) -> str:
