@@ -13,8 +13,22 @@ from .config import Settings
 from .embedding import Embedder
 from .store import Store
 
-SYSTEM_PROMPT = """Tu es l'assistant documentaire interne de {client}. Reponds en francais,
-uniquement a partir des extraits de documents fournis et de l'historique de la conversation.
+# Identité commune à TOUS les chemins où l'assistant s'adresse à l'utilisateur
+# (documentaire, web, conversation, vision). Assemblée par system_prompt() : un
+# seul point de vérité, sinon l'assistant « oublie » qui il est selon le chemin
+# emprunté (c'était le cas : aucun prompt ne disait son nom ni son éditeur).
+# Volontairement courte : sur le chemin documentaire, la consigne qui doit
+# dominer reste l'usage des extraits et la citation des sources.
+IDENTITY = """Tu es Jade, l'assistante documentaire éditée par Jade Sàrl, déployée chez {client}.
+Tu fonctionnes en local sur le poste de l'utilisateur : ses documents sont indexés et
+consultés sur cette machine et n'en sortent jamais ; seuls sa question et de courts
+extraits sont transmis au serveur d'IA de Jade, le temps de rédiger la réponse.
+Si on te demande qui tu es ou comment tu t'appelles, dis-le simplement, sans emphase.
+Tu ne portes aucun autre nom que Jade et tu ne t'attribues aucune capacité que tu n'as pas.
+Réponds en français, vouvoie l'utilisateur, ton sobre et professionnel, aucun emoji."""
+
+SYSTEM_PROMPT = """Pour cette question, reponds uniquement a partir des extraits de
+documents fournis et de l'historique de la conversation.
 IMPORTANT — pertinence : certains extraits fournis peuvent etre HORS SUJET
 (la recherche est approximative). N'utilise QUE les extraits qui repondent
 reellement a la question ; ignore totalement les autres, ne les mentionne pas,
@@ -27,28 +41,28 @@ et n'ecris jamais le nom des fichiers sources dans le texte.
 Ne jamais inventer de contenu. Utilise l'historique pour comprendre les
 questions de suivi (pronoms, references implicites)."""
 
-WEB_SYSTEM_PROMPT = """Tu es l'assistant interne de {client}. Reponds en francais a partir
-des extraits de pages web fournis (resultats d'une recherche que tu viens
-d'effectuer) et de l'historique de la conversation.
+WEB_SYSTEM_PROMPT = """Pour cette question, reponds a partir des extraits de pages web
+fournis (resultats d'une recherche que tu viens d'effectuer) et de l'historique
+de la conversation.
 N'utilise que les extraits reellement pertinents ; ignore les pages hors sujet.
 Citations : uniquement [Source N] apres l'affirmation concernee — jamais de
 section « Sources » en fin de reponse, jamais d'URL dans le texte.
 Si les pages ne repondent pas a la question, dis-le simplement (ne parle PAS
 de « documents indexes » : c'est une recherche web)."""
 
-SMALLTALK_PROMPT = """Tu es Jade, l'assistant documentaire interne de {client}.
-Reponds en francais, brievement et chaleureusement. C'est un echange
+SMALLTALK_PROMPT = """Reponds brievement, avec naturel. C'est un echange
 conversationnel (salutation, remerciement, propos personnel, question sur toi) :
 ne cite aucun document et NE FAIS AUCUNE recherche. Si l'utilisateur te confie une
 information sur lui (metier, age, preference), accuse simplement reception avec
 naturel. Si on te demande ce que tu sais faire, explique que tu reponds aux
-questions sur les documents internes de l'entreprise en citant tes sources."""
+questions sur les documents internes de {client} en citant tes sources, que tu
+peux chercher sur le web et creer des fichiers a la demande."""
 
 # Aucun document ne correspond ET pas d'intention web explicite : on répond
 # quand même utilement (culture générale / conversation) plutôt que de lancer
 # une recherche web pour un rien.
-GENERAL_PROMPT = """Tu es Jade, l'assistant interne de {client}. Reponds en francais,
-utilement et avec bon sens, sans jamais lancer de recherche.
+GENERAL_PROMPT = """Pour cette question, reponds utilement et avec bon sens,
+sans jamais lancer de recherche.
 La question ne correspond a aucun document interne indexe. Selon le cas :
 - petite conversation, propos personnel, remerciement -> reponds naturellement et brievement ;
 - question de culture generale -> reponds si tu la connais, sans pretendre que cela vient des documents ;
@@ -61,7 +75,11 @@ _SMALLTALK = re.compile(
     r"^(salut|bonjour|bonsoir|hello|hey|coucou|yo|merci( beaucoup)?|ok|d'accord"
     r"|super|cool|parfait|top|ca va( et toi)?|ça va( et toi)?|comment vas[- ]tu"
     r"|comment ca va|comment ça va|au revoir|a plus|à plus|bonne (journee|journée|soiree|soirée)"
-    r"|qui es[- ]tu|tu es qui|que sais[- ]tu faire|tu fais quoi|test|aide|help)"
+    r"|qui es[- ]tu|tu es qui|que sais[- ]tu faire|tu fais quoi|test|aide|help"
+    # questions d'identité : réponse directe (l'identité est dans le prompt),
+    # inutile de payer une pré-analyse ni une recherche documentaire
+    r"|comment (tu )?t'?appelles?[- ]?(tu)?|tu t'?appelles comment"
+    r"|(c'est )?quoi ton nom|quel est ton nom|ton nom|qui t'a (cree|créé|fait))"
     r"[\s!?.,:)]*$",
     re.IGNORECASE,
 )
@@ -85,9 +103,8 @@ def is_smalltalk(question: str) -> bool:
     return len(q) <= 220 and bool(_PERSONAL.search(q))
 
 
-VISION_SYSTEM_PROMPT = """Tu es l'assistant documentaire interne de {client}. Reponds en francais.
-Analyse les images jointes par l'utilisateur et decris ce qui est pertinent
-pour sa question. Si des documents joints ou extraits sont fournis, cite-les
+VISION_SYSTEM_PROMPT = """Analyse les images jointes par l'utilisateur et decris ce qui est
+pertinent pour sa question. Si des documents joints ou extraits sont fournis, cite-les
 par leur nom. Ne jamais inventer de contenu."""
 
 _JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
@@ -103,6 +120,47 @@ def today_fr() -> str:
 
     d = date.today()
     return f"{_JOURS[d.weekday()]} {d.day} {_MOIS[d.month - 1]} {d.year}"
+
+
+def user_line(user_name: str = "") -> str:
+    """Phrase qui présente l'interlocuteur à l'assistant.
+
+    Le nom fourni fait autorité sur tout le reste (faits mémorisés, contenu des
+    documents) : c'est précisément un fait mémorisé erroné (« Je m'appelle Léo »,
+    extrait d'une réponse de l'assistant) qui faisait appeler l'utilisateur par
+    un prénom qu'il n'avait jamais donné.
+    """
+    name = " ".join((user_name or "").split())
+    if name:
+        return (f"L'utilisateur avec qui tu échanges s'appelle « {name} ». "
+                "Si tu t'adresses à lui par son nom, utilise celui-là et aucun "
+                "autre, même si un autre prénom apparaît dans les faits mémorisés, "
+                "l'historique ou les documents.")
+    return ("Tu ne connais pas le nom de l'utilisateur : ne l'appelle jamais par un "
+            "prénom et n'en invente aucun.")
+
+
+def system_prompt(role_prompt: str, settings: Settings, user_name: str = "",
+                  memory_text: str = "") -> str:
+    """Prompt système complet : identité de Jade, rôle du moment (documentaire,
+    web, conversation, vision), date, interlocuteur, puis faits mémorisés.
+
+    Point d'assemblage unique : l'identité et le nom de l'utilisateur sont ainsi
+    garantis identiques sur TOUS les chemins de réponse.
+    """
+    parts = [
+        IDENTITY.format(client=settings.client_name),
+        role_prompt.format(client=settings.client_name),
+        f"Nous sommes le {today_fr()}.",
+        user_line(user_name),
+    ]
+    if memory_text:
+        parts.append(
+            "Faits mémorisés sur cet utilisateur (conversations précédentes, à "
+            "utiliser s'ils sont pertinents). Ils peuvent être inexacts ou périmés ; "
+            "le nom indiqué ci-dessus fait foi :\n" + memory_text)
+    return "\n\n".join(parts)
+
 
 HISTORY_LIMIT = 8  # 4 echanges
 
@@ -256,6 +314,7 @@ def build_messages(
     attachments_text: str = "",
     images: list[str] | None = None,
     memory_text: str = "",
+    user_name: str = "",
 ) -> list[dict]:
     """Messages Ollama : system + historique (texte brut) + question courante
     accompagnee des extraits recuperes, des pieces jointes texte et des
@@ -287,11 +346,8 @@ def build_messages(
         prompt = WEB_SYSTEM_PROMPT
     else:
         prompt = SYSTEM_PROMPT
-    system = prompt.format(client=settings.client_name)
-    system += f"\nNous sommes le {today_fr()}."
-    if memory_text:
-        system += ("\n\nFaits mémorisés sur cet utilisateur (conversations "
-                   "précédentes, à utiliser si pertinents) :\n" + memory_text)
+    system = system_prompt(prompt, settings, user_name=user_name,
+                           memory_text=memory_text)
     messages = [{"role": "system", "content": system}]
     messages.extend(history[-HISTORY_LIMIT:])
     user_msg: dict = {"role": "user", "content": "\n".join(context_blocks)}

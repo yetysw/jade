@@ -33,6 +33,9 @@ prénom/nom, rôle, équipe, préférences exprimées, projets ou sujets récurr
 façon dont il veut qu'on lui réponde.
 N'invente rien. Ignore le contenu des documents cités, les questions ponctuelles
 et tout ce qui est déjà évident.
+Ne retiens JAMAIS ce que l'assistant dit de LUI-MÊME (son nom, son rôle, son
+fonctionnement) : seul ce qui concerne l'UTILISATEUR compte. Un fait doit
+toujours parler de l'utilisateur à la troisième personne.
 Chaque fait doit être une PHRASE COMPLÈTE ET AUTONOME, compréhensible sans
 contexte. Exemples : "L'utilisateur s'appelle Noé", "Il est technicien
 informatique chez Jade", "Il préfère des réponses courtes".
@@ -45,6 +48,13 @@ INJECT_THRESHOLD = 0.25  # pertinence minimale pour injecter un fait
 MAX_INJECTED = 4
 INJECT_ALL_BELOW = 15    # peu de faits : on les injecte tous (coût négligeable)
 MAX_MEMORIES = 400
+
+# Fait rédigé à la 1re personne : c'est presque toujours une phrase de
+# l'ASSISTANT sur lui-même que l'extraction a recopiée (« Je m'appelle Léo »,
+# « Je suis assistant documentaire ») — mémorisée comme un fait sur
+# l'utilisateur, elle lui faisait attribuer un prénom qu'il n'a jamais donné.
+# Les faits attendus sont à la 3e personne (« L'utilisateur s'appelle… »).
+_SELF_FACT = re.compile(r"^(je\b|j'|mon\b|ma\b|mes\b)", re.IGNORECASE)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
@@ -134,6 +144,9 @@ class MemoryStore:
         folder_id : dossier (projet) auquel rattacher le fait ; None = global."""
         text = text.strip()
         if not text or len(text) > 300:
+            return False
+        if _SELF_FACT.match(text):
+            log.debug("Fait ignoré (propos de l'assistant sur lui-même) : %s", text)
             return False
         emb = np.asarray(self._embedder.embed_query(text), dtype=np.float32)
         for _id, _t, e in self._all():  # dédup contre TOUS les faits

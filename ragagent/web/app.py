@@ -36,7 +36,7 @@ from ..ingest.indexer import run_index
 from ..llm import LLMError, OllamaClient
 from ..rag import (
     GENERAL_PROMPT, SMALLTALK_PROMPT, build_messages, format_sources, is_smalltalk,
-    retrieve_timed, today_fr,
+    retrieve_timed, system_prompt,
 )
 from ..router import route_question
 from ..security import encrypt_at_rest
@@ -165,6 +165,12 @@ NO_INFO_ANSWER = (
     "Je ne trouve pas d'information pertinente dans les documents indexés "
     "pour cette question."
 )
+# Mode documentaire imposé alors qu'aucun document n'est encore indexé :
+# l'utilisateur doit comprendre que c'est l'index qui manque, pas la réponse.
+NO_INDEX_ANSWER = (
+    "Aucun document n'est indexé pour l'instant : la recherche documentaire ne "
+    "peut rien trouver. Ajoutez des dossiers à indexer dans les réglages."
+)
 OFFLINE_NOTICE = (
     "**Mode hors ligne** — aucune donnée n'a été envoyée au serveur central. "
     "Voici les extraits locaux les plus pertinents :"
@@ -189,6 +195,9 @@ class AskRequest(BaseModel):
     req_id: str = ""       # identifiant client pour l'arrêt de génération
     incognito: bool = False
     history: list[HistoryTurn] = []  # historique fourni par le client (incognito)
+    # mode de recherche imposé par l'utilisateur : auto (routeur) | docs | web |
+    # file. `str | None` : un client qui envoie null ne doit pas provoquer un 422.
+    mode: str | None = "auto"
 
 
 class StopRequest(BaseModel):
@@ -197,6 +206,10 @@ class StopRequest(BaseModel):
 
 class PrefsRequest(BaseModel):
     incognito: bool = False
+
+
+class ProfileRequest(BaseModel):
+    display_name: str = ""  # vide = revenir au nom du compte Windows
 
 
 class SaveRequest(BaseModel):
@@ -319,6 +332,68 @@ def _session_display_name() -> str:
     except Exception:
         pass
     return username
+
+
+DISPLAY_NAME_KEY = "DisplayName"  # préférence : nom choisi par l'utilisateur
+MAX_DISPLAY_NAME = 60
+
+
+def sanitize_display_name(raw: str) -> str:
+    """Nettoie un nom saisi dans les réglages : espaces normalisés, longueur
+    bornée. Chaîne vide = réinitialisation sur le compte Windows.
+
+    Lève ValueError sur un caractère de contrôle : ce nom est injecté dans le
+    prompt système, un retour à la ligne y ouvrirait une fausse instruction.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    if any(ord(c) < 32 or ord(c) == 127 for c in text):
+        raise ValueError("Le nom ne doit pas contenir de caractères de contrôle.")
+    return " ".join(text.split())[:MAX_DISPLAY_NAME].strip()
+
+
+def resolve_display_name() -> tuple[str, bool]:
+    """(nom affiché, personnalisé ?).
+
+    Le nom choisi par l'utilisateur PRIME sur le compte Windows — partout :
+    /api/status, prompt système, écran de réglages.
+    """
+    try:
+        custom = sanitize_display_name(prefs.get_str(DISPLAY_NAME_KEY, ""))
+    except ValueError:  # préférence corrompue : on l'ignore
+        custom = ""
+    if custom:
+        return custom, True
+    return _session_display_name(), False
+
+
+# Mode de recherche imposé depuis l'interface (champ « mode » de /ask).
+ASK_MODES = ("auto", "docs", "web", "file")
+
+
+def normalize_mode(raw: str | None) -> str:
+    """Valeur du champ `mode` -> mode connu. Tolérant : une valeur inconnue (ou
+    absente) retombe sur « auto », le comportement historique — on ne casse pas
+    une requête pour un mode mal orthographié."""
+    mode = (raw or "auto").strip().lower()
+    return mode if mode in ASK_MODES else "auto"
+
+
+# Fin de réponse = question posée à l'utilisateur. On regarde la dernière ligne
+# non vide, débarrassée des décorations markdown de fin (**gras**, liste, etc.).
+_TRAILING_DECOR = " \t*_`~\"'»)]}›"
+
+
+def ends_with_question(answer: str) -> bool:
+    """Vrai si la réponse se termine par une question adressée à l'utilisateur
+    (déclenche les réponses rapides plutôt que les questions de suivi)."""
+    for line in reversed((answer or "").splitlines()):
+        stripped = line.strip().rstrip(_TRAILING_DECOR)
+        if not stripped:
+            continue
+        return stripped.endswith(("?", "？"))
+    return False
 
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
@@ -761,6 +836,51 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
                 out.append(s)
         return out[:3]
 
+    def _suggest_replies(question: str, answer: str) -> list[str]:
+        """Réponses rapides : ce que L'UTILISATEUR pourrait répondre à la question
+        que l'assistant vient de lui poser (l'inverse des questions de suivi).
+
+        Même mécanique que _suggest_followups : petit modèle, un seul essai,
+        timeout court, échec silencieux — jamais bloquant pour le flux."""
+        try:
+            raw = llm.chat(
+                [
+                    {"role": "system", "content":
+                        "L'assistant vient de poser une question à l'utilisateur. "
+                        "Propose au maximum 3 RÉPONSES possibles que l'utilisateur "
+                        "pourrait lui donner, formulées de son point de vue (« Oui, "
+                        "en détail », « Plutôt le second cas », « Sur 2026 »). "
+                        "Elles doivent être distinctes, réellement utiles et "
+                        "TRÈS COURTES (moins de 60 caractères), en français, une par "
+                        "ligne, sans numéro, sans tiret, sans guillemets. Ne pose "
+                        "JAMAIS de question. Rien d'autre."},
+                    {"role": "user", "content":
+                        f"Question initiale : {question[:200]}\n"
+                        f"Fin de la réponse de l'assistant : {answer[-600:]}\n\n"
+                        "Réponses possibles :"},
+                ],
+                model=settings.router_model or None, think=False,
+                options={"temperature": 0.3, "num_predict": 70},
+                retry=False, timeout=15.0,
+            )
+        except Exception as e:
+            log.debug("Réponses rapides échouées : %s", e)
+            return []
+        out: list[str] = []
+        seen: set[str] = set()
+        for line in raw.splitlines():
+            s = line.strip().lstrip("-•*—0123456789.) ").strip().strip('"«»“”').strip()
+            # une réponse n'est pas une question : sinon le petit modèle propose
+            # en réalité des questions de suivi, qui ont déjà leur mécanisme
+            if not s or s.endswith("?") or not 2 <= len(s) < 60:
+                continue
+            key = s.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(s)
+        return out[:3]
+
     DEFAULT_WELCOME = [
         {"kind": "docs",
          "prompt": "Résume la procédure de sauvegarde décrite dans nos documents."},
@@ -890,7 +1010,8 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
             "client_name": settings.client_name,
             "app_name": "Jade",
             "app_version": __version__,
-            "username": _session_display_name(),
+            # nom choisi dans les réglages s'il existe, sinon compte Windows
+            "username": resolve_display_name()[0],
             "chunks_indexed": store.count(),
             "docs_dir": str(settings.docs_dir),
             "llm_ok": state["llm_ok"],
@@ -972,6 +1093,27 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
     def set_prefs(req: PrefsRequest):
         prefs.set_bool("Incognito", req.incognito)
         return {"incognito": req.incognito}
+
+    # ------------------------------------------------- profil (nom de l'utilisateur)
+
+    @app.get("/api/profile")
+    def get_profile():
+        """Nom sous lequel l'assistant s'adresse à l'utilisateur.
+        is_custom : vrai si c'est un nom choisi, faux s'il vient du compte Windows."""
+        name, is_custom = resolve_display_name()
+        return {"display_name": name, "is_custom": is_custom}
+
+    @app.post("/api/profile")
+    def set_profile(req: ProfileRequest):
+        """Change le nom affiché (60 caractères max). Chaîne vide = retour au nom
+        du compte Windows."""
+        try:
+            cleaned = sanitize_display_name(req.display_name)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        prefs.set_str(DISPLAY_NAME_KEY, cleaned)
+        name, is_custom = resolve_display_name()
+        return {"display_name": name, "is_custom": is_custom}
 
     # ------------------------------- identifiants de connexion (modifiables)
 
@@ -1483,6 +1625,10 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
             state["cancels"][req.req_id] = cancel
 
         offline = req.offline or req.dry_run
+        mode = normalize_mode(req.mode)
+        # nom sous lequel l'assistant s'adresse à l'utilisateur (réglages, sinon
+        # compte Windows) — résolu une fois par question
+        user_name = resolve_display_name()[0]
         from ..filegen import wanted_format
 
         file_fmt = wanted_format(question)
@@ -1575,11 +1721,11 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
             if not_found and not interrupted and rescue_history is not None:
                 yield _sse({"type": "reset"})
                 yield _sse({"type": "sources", "sources": []})
-                gen_system = GENERAL_PROMPT.format(client=settings.client_name)
-                gen_system += f"\nNous sommes le {today_fr()}."
-                mem = "" if incognito else memory.context_for(question, folder_id)
-                if mem:
-                    gen_system += "\n\nFaits mémorisés sur cet utilisateur :\n" + mem
+                gen_system = system_prompt(
+                    GENERAL_PROMPT, settings, user_name=user_name,
+                    memory_text="" if incognito
+                    else memory.context_for(question, folder_id),
+                )
                 gmsgs = [
                     {"role": "system", "content": gen_system},
                     *rescue_history[-6:],
@@ -1642,12 +1788,19 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
             elif file_error:
                 yield _sse({"type": "progress",
                             "message": f"Création du fichier impossible : {file_error}"})
-            # questions de suivi suggérées (petit modèle, économe) — jamais après
-            # un smalltalk (suggest=False) ni une génération interrompue
+            # Suggestions (petit modèle, économe) — jamais après un smalltalk
+            # (suggest=False) ni une génération interrompue. Deux cas exclusifs :
+            # l'assistant a posé une question -> réponses rapides de l'utilisateur ;
+            # sinon -> questions de suivi (comportement historique).
             if suggest and answer_text.strip():
-                followups = _suggest_followups(question, answer_text)
-                if followups:
-                    yield _sse({"type": "followups", "questions": followups})
+                if ends_with_question(answer_text):
+                    replies = _suggest_replies(question, answer_text)
+                    if replies:
+                        yield _sse({"type": "replies", "options": replies})
+                else:
+                    followups = _suggest_followups(question, answer_text)
+                    if followups:
+                        yield _sse({"type": "followups", "questions": followups})
             yield _sse({"type": "done", "timings": timings})
 
         def finish(message, sources, timings, t_start):
@@ -1682,19 +1835,20 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
 
                 # Message conversationnel (« salut », « merci », propos perso) :
                 # réponse directe, sans recherche ni sources. On ne court-circuite
-                # PAS si l'utilisateur demande un fichier ou une recherche web.
-                if (not has_attachments and not force_web and not file_fmt
-                        and is_smalltalk(question)):
+                # PAS si l'utilisateur demande un fichier, une recherche web, ou
+                # s'il a imposé un mode de recherche (son choix prime).
+                if (mode == "auto" and not has_attachments and not force_web
+                        and not file_fmt and is_smalltalk(question)):
                     yield _sse({"type": "sources", "sources": []})
                     if offline:
                         yield from finish("Bonjour ! Posez-moi une question sur vos documents.",
                                           None, timings, t_start)
                         return
-                    st_system = SMALLTALK_PROMPT.format(client=settings.client_name)
-                    st_system += f"\nNous sommes le {today_fr()}."
-                    mem = "" if incognito else memory.context_for(question, folder_id)
-                    if mem:
-                        st_system += "\n\nFaits mémorisés sur cet utilisateur :\n" + mem
+                    st_system = system_prompt(
+                        SMALLTALK_PROMPT, settings, user_name=user_name,
+                        memory_text="" if incognito
+                        else memory.context_for(question, folder_id),
+                    )
                     messages = [
                         {"role": "system", "content": st_system},
                         *history[-6:],
@@ -1722,11 +1876,11 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
                     """Réponse conversationnelle / culture générale, sans recherche
                     ni sources — questions hors documents et sans intention web."""
                     yield _sse({"type": "sources", "sources": []})
-                    gen_system = GENERAL_PROMPT.format(client=settings.client_name)
-                    gen_system += f"\nNous sommes le {today_fr()}."
-                    mem = "" if incognito else memory.context_for(question, folder_id)
-                    if mem:
-                        gen_system += "\n\nFaits mémorisés sur cet utilisateur :\n" + mem
+                    gen_system = system_prompt(
+                        GENERAL_PROMPT, settings, user_name=user_name,
+                        memory_text="" if incognito
+                        else memory.context_for(question, folder_id),
+                    )
                     gmsgs = [
                         {"role": "system", "content": gen_system},
                         *history[-6:],
@@ -1740,11 +1894,31 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
                 # Un routeur LLM court tranche à chaque question (bien plus fiable
                 # que les mots-clés) : on ne fouille les documents que si la réponse
                 # peut s'y trouver, et on ne va sur le web que si c'est utile.
+                # `mode` (choix explicite de l'utilisateur) court-circuite ce
+                # routeur ; il ne peut en revanche pas passer outre le mode hors
+                # ligne ni une pièce jointe (contexte local imposé).
                 has_docs = store.count() > 0
                 from ..filegen import is_reformat_request
 
-                if offline or images or has_attachments:
+                local_only = offline or images or has_attachments
+                # Le choix de l'utilisateur ne peut pas passer outre deux
+                # garde-fous : le contexte local imposé (hors ligne, pièce jointe)
+                # et la désactivation administrative du web (WEB_FALLBACK=0).
+                route_mode = mode
+                if route_mode == "web" and (local_only or not settings.web_fallback):
+                    yield _sse({"type": "progress", "message":
+                                "Recherche web indisponible ici — réponse à partir "
+                                "du contexte local."})
+                    route_mode = "auto"
+
+                if local_only:
                     decided_route, web_q = "docs", None  # local uniquement
+                elif route_mode == "web":
+                    # forcé : on cherche en ligne même si les documents pourraient
+                    # répondre (web_query enrichit la requête avec l'historique)
+                    decided_route, web_q = "web", web_query(question, history)
+                elif route_mode == "docs":
+                    decided_route, web_q = "docs", None
                 elif force_web:
                     decided_route, web_q = "web", web_query(question, history)
                 elif file_fmt and history and is_reformat_request(question):
@@ -1764,6 +1938,13 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
                     if settings.strong_model and level == "complexe":
                         answer_model = settings.strong_model
 
+                # Mode « fichier » imposé : la SOURCE du contenu reste celle
+                # décidée ci-dessus (documents, web ou connaissances générales),
+                # mais un fichier doit être produit. Format explicite de la
+                # question s'il y en a un, sinon Word (le plus neutre).
+                if mode == "file":
+                    file_fmt = file_fmt or "docx"
+
                 # ---- WEB : recherche en ligne encadrée ----
                 if decided_route == "web" and not offline:
                     yield _sse({"type": "progress", "message": "Recherche web en cours…"})
@@ -1774,11 +1955,16 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
                     if web_hits:
                         sources = format_sources(web_hits)
                         yield _sse({"type": "sources", "sources": sources})
-                        messages = build_messages(question, web_hits, history, settings)
+                        messages = build_messages(question, web_hits, history, settings,
+                                                  user_name=user_name)
                         yield from stream_llm(messages, sources, timings, t_start,
                                               model=answer_model,
                                               file_fmt=file_fmt, gen_title=first_exchange)
                     else:
+                        if route_mode == "web":
+                            yield _sse({"type": "progress", "message":
+                                        "Aucun résultat web exploitable — réponse "
+                                        "sans source."})
                         yield from general_answer(file_fmt)
                     return
 
@@ -1815,8 +2001,15 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
                     return
 
                 # Aucun extrait pertinent et pas de pièce jointe : réponse utile
-                # (culture générale / conversation) plutôt qu'un échec sec.
+                # (culture générale / conversation) plutôt qu'un échec sec —
+                # SAUF en mode documentaire imposé, où l'utilisateur doit savoir
+                # que ses documents ne contiennent pas la réponse.
                 if not hits and not has_attachments:
+                    if mode == "docs":
+                        yield from finish(
+                            NO_INDEX_ANSWER if not has_docs else NO_INFO_ANSWER,
+                            None, timings, t_start)
+                        return
                     yield from general_answer(file_fmt)
                     return
 
@@ -1824,6 +2017,7 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
                     question, hits, history, settings,
                     attachments_text=attachments_text, images=images or None,
                     memory_text="" if incognito else memory.context_for(question, folder_id),
+                    user_name=user_name,
                 )
                 model = settings.vision_model if images else answer_model
                 # contexte reduit pour la vision : moins de pression VRAM avec
@@ -1834,8 +2028,12 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
                     file_fmt=file_fmt, gen_title=first_exchange,
                     # si les documents ne répondent pas (« je ne trouve pas »),
                     # bascule vers une réponse conversationnelle/générale — SANS web —
-                    # plutôt qu'un échec sec (sauf si une pièce jointe fournit le contexte)
-                    rescue_history=None if (images or has_attachments) else history,
+                    # plutôt qu'un échec sec (sauf si une pièce jointe fournit le
+                    # contexte, ou si le mode documentaire est imposé : dans ce cas
+                    # la réponse « je ne trouve pas » est justement l'information
+                    # attendue)
+                    rescue_history=None if (images or has_attachments or mode == "docs")
+                    else history,
                 )
             except LLMError as e:
                 yield _sse({"type": "error", "message": str(e)})
