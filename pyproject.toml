@@ -1,6 +1,6 @@
 [project]
 name = "jade"
-version = "1.9.1"
+version = "1.10.0"
 description = "Jade — assistant documentaire local : indexation locale, retrieval local, generation via LLM central (Ollama/AI01)"
 requires-python = ">=3.12"
 dependencies = [
