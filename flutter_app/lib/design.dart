@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'theme.dart';
 
@@ -227,6 +228,59 @@ class _SpinningLogoState extends State<_SpinningLogo>
     }
     return RotationTransition(turns: _c, child: widget.child);
   }
+}
+
+// ─────────────────────────────────────────────────────────────── markdown
+/// Feuille de style Markdown commune à tout rendu Markdown de Jade (réponses
+/// de l'assistant, documents légaux) : cohérente avec le design system,
+/// lisible en thème clair et sombre. Ne jamais afficher un [Markdown] /
+/// [MarkdownBody] sans cette feuille — les styles par défaut du paquet
+/// (`MarkdownStyleSheet.fromTheme`) figent certaines couleurs (citations
+/// notamment) et ne s'adaptent pas au thème sombre.
+MarkdownStyleSheet jadeMarkdownStyleSheet(BuildContext context) {
+  final jade = context.jade;
+  return MarkdownStyleSheet(
+    p: JadeType.body.copyWith(color: jade.body, height: 1.65),
+    h1: JadeType.headline.copyWith(color: jade.text),
+    h2: JadeType.title.copyWith(color: jade.text),
+    h3: JadeType.subtitle.copyWith(color: jade.text),
+    h1Padding: const EdgeInsets.only(top: JadeSpace.md, bottom: JadeSpace.xs),
+    h2Padding: const EdgeInsets.only(top: JadeSpace.md, bottom: JadeSpace.xs),
+    h3Padding: const EdgeInsets.only(top: JadeSpace.sm, bottom: JadeSpace.xs),
+    listBullet: JadeType.body.copyWith(color: jade.body),
+    listIndent: JadeSpace.xl,
+    strong: const TextStyle(fontWeight: FontWeight.w700),
+    em: const TextStyle(fontStyle: FontStyle.italic),
+    code: TextStyle(
+        fontSize: 12.5,
+        fontFamily: 'Consolas',
+        backgroundColor: jade.tile,
+        color: jade.text),
+    codeblockPadding: const EdgeInsets.all(JadeSpace.md),
+    codeblockDecoration: BoxDecoration(
+      color: jade.tile,
+      borderRadius: JadeRadius.all(JadeRadius.md),
+      border: Border.all(color: jade.border),
+    ),
+    blockquote: JadeType.body.copyWith(color: jade.body, height: 1.6),
+    blockquotePadding: const EdgeInsets.fromLTRB(
+        JadeSpace.md, JadeSpace.sm, JadeSpace.md, JadeSpace.sm),
+    blockquoteDecoration: BoxDecoration(
+      color: jade.tile,
+      borderRadius: JadeRadius.all(JadeRadius.sm),
+      border: Border(left: BorderSide(color: jade.secondary, width: 3)),
+    ),
+    horizontalRuleDecoration: BoxDecoration(
+      border: Border(top: BorderSide(color: jade.border)),
+    ),
+    tableBorder: TableBorder.all(color: jade.border, width: 0.8),
+    tableHead:
+        JadeType.label.copyWith(color: jade.text, fontWeight: FontWeight.w700),
+    tableBody: JadeType.label.copyWith(color: jade.body),
+    tableCellsPadding: const EdgeInsets.symmetric(
+        horizontal: JadeSpace.md, vertical: JadeSpace.sm),
+    a: TextStyle(color: jade.primary, fontWeight: FontWeight.w600),
+  );
 }
 
 // ───────────────────────────────────────────────── libellé de section (eyebrow)

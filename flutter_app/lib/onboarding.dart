@@ -223,6 +223,7 @@ Future<void> _showDoc(
                   return Markdown(
                     data: snap.data!,
                     padding: const EdgeInsets.all(JadeSpace.xxl),
+                    styleSheet: jadeMarkdownStyleSheet(ctx),
                   );
                 },
               ),
