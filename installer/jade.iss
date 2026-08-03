@@ -14,6 +14,13 @@
 #define AppExeName "jade.exe"
 #define RepoRoot ".."
 #define FlutterRelease RepoRoot + "\flutter_app\build\windows\x64\runner\Release"
+; Dossier du backend gele (sortie PyInstaller). Surchargeable au build :
+;   ISCC /DBackendDir=<chemin> installer\jade.iss
+; utile si dist\Jade est verrouille par un handle Windows et que PyInstaller a
+; du ecrire ailleurs (--distpath).
+#ifndef BackendDir
+  #define BackendDir RepoRoot + "\dist\Jade"
+#endif
 
 [Setup]
 AppId={{7E6A2C43-9B1D-4F5E-A9D0-JADEJade0001}
@@ -71,7 +78,7 @@ Source: "{#FlutterRelease}\*"; DestDir: "{app}"; Flags: recursesubdirs ignorever
 ; 2) backend Python gelé (PyInstaller) en sidecar -> {app}\backend
 ;    lancé par l'app Flutter en « Jade.exe serve ». Le .env est généré par
 ;    l'assistant à côté de ce backend (jamais embarqué).
-Source: "{#RepoRoot}\dist\Jade\*"; DestDir: "{app}\backend"; Excludes: ".env,data\*,logs\*,models\*"; Flags: recursesubdirs ignoreversion
+Source: "{#BackendDir}\*"; DestDir: "{app}\backend"; Excludes: ".env,data\*,logs\*,models\*"; Flags: recursesubdirs ignoreversion
 #ifndef TESTBUILD
 ; Les modèles (embeddings + reranker) ne sont PAS embarqués : l'application les
 ; télécharge automatiquement au premier lancement dans {commonappdata}\Jade\models
