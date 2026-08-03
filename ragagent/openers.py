@@ -15,7 +15,13 @@ from pathlib import Path
 def _launch(target: str, *, reveal: bool = False) -> None:
     if sys.platform == "win32":
         if reveal:
-            subprocess.Popen(["explorer", "/select,", target])
+            # ATTENTION : « /select, » et le chemin doivent former UN SEUL
+            # argument collé (« /select,C:\\dossier\\fichier »). Passés séparément,
+            # l'Explorateur ne les recolle pas et affiche « Emplacement non
+            # disponible » alors que le chemin existe. On passe donc la ligne de
+            # commande complète (pas de shell : CreateProcess la découpe lui-même,
+            # et les guillemets couvrent les chemins contenant des espaces).
+            subprocess.Popen(f'explorer /select,"{target}"')
         else:
             os.startfile(target)  # type: ignore[attr-defined]  # Windows uniquement
     elif sys.platform == "darwin":
