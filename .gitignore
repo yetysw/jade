@@ -36,3 +36,4 @@ licsrv/*.db
 licsrv/*.db-*
 licsrv/data/
 licsrv/.env
+dist2/
