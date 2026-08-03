@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from .. import licensing, models_fetch, ntfs, ocr, prefs, updater, winmem
 from ..chat_store import DEFAULT_TITLE, ChatStore
 from ..config import Settings
-from ..openers import open_path, open_url, reveal_path
+from ..openers import copy_file_to_clipboard, open_path, open_url, reveal_path
 from ..embedding import Embedder
 from ..hybrid import Bm25Index, Reranker
 from ..ingest.indexer import run_index
@@ -532,6 +532,63 @@ def _parse_welcome(raw: str) -> list[dict]:
         if len(out) == 3:
             break
     return out
+
+
+# Longueur maximale d'une URL mailto: les lanceurs Windows (ShellExecute, puis
+# le client mail) plafonnent autour de 2000 caractères et tronquent
+# silencieusement au-delà — on garde une marge.
+MAILTO_MAX = 1900
+# Textes du corps volontairement sans accents : certains clients mail décodent
+# mal les octets UTF-8 percent-encodés d'une URL mailto (mojibake). Le contenu
+# libre de l'utilisateur, lui, est transmis tel quel.
+_TRUNC = "\n[...] (message tronque : trop long pour le client mail)"
+
+
+def _feedback_note(zip_path: "Path | None", clipboard: bool, revealed: bool) -> str:
+    """Consigne ajoutée au corps du message : un lien mailto: ne peut PAS porter
+    de pièce jointe (limitation du standard), l'utilisateur doit coller ou
+    glisser le fichier lui-même. On lui dit exactement quoi faire selon ce qui a
+    réellement fonctionné."""
+    if zip_path is None:
+        return ""
+    paste = "Cmd+V" if sys.platform == "darwin" else "Ctrl+V"
+    if clipboard:
+        how = ("Il est deja copie dans le presse-papier : cliquez dans ce "
+               f"message et faites {paste} pour le joindre.")
+    elif revealed:
+        how = ("Il vient d'etre affiche dans l'explorateur de fichiers : "
+               "glissez-le dans ce message pour le joindre.")
+    else:
+        how = "Ouvrez ce dossier et glissez le fichier dans ce message."
+    return ("\n\n---\n"
+            "Fichier de diagnostic a joindre a ce message :\n"
+            f"{zip_path}\n{how}")
+
+
+def _mailto_url(email: str, subject: str, content: str, note: str = "",
+                limit: int = MAILTO_MAX) -> str:
+    """URL mailto: bornee a `limit` caracteres UNE FOIS ENCODEE. La consigne
+    `note` est prioritaire : c'est le contenu libre de l'utilisateur qui est
+    tronque, jamais l'instruction de joindre le diagnostic."""
+    import urllib.parse
+
+    quote = urllib.parse.quote
+    head = f"mailto:{email}?subject={quote(subject)}&body="
+    budget = limit - len(head) - len(quote(note))
+    text = content
+    if budget <= 0:
+        text = ""  # cas extreme : on garde au moins la consigne
+    elif len(quote(text)) > budget:
+        # plus grand prefixe (+ marqueur de troncature) qui tient dans le budget
+        lo, hi = 0, len(text)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if len(quote(text[:mid] + _TRUNC)) <= budget:
+                lo = mid
+            else:
+                hi = mid - 1
+        text = text[:lo] + _TRUNC if lo else ""
+    return head + quote(text + note)
 
 
 def create_app(settings: Settings, token: str = "") -> FastAPI:
@@ -1552,47 +1609,56 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
 
     @app.post("/api/feedback")
     def feedback(req: FeedbackRequest):
-        """Retour utilisateur : prépare un zip de diagnostic, ouvre le client
-        e-mail par défaut (mailto → Windows/macOS/Linux) pré-rempli vers Jade,
-        et révèle le zip dans l'explorateur pour que l'utilisateur le glisse
-        dans le message (un lien mailto ne peut pas joindre de fichier —
-        limitation du standard, pas de l'application)."""
-        import urllib.parse
+        """Retour utilisateur, en trois temps :
 
+        1. assemble un zip de diagnostic (journaux + état, aucun contenu de
+           conversation) ;
+        2. copie ce zip dans le presse-papier **en tant que fichier** — un lien
+           mailto: ne peut pas porter de pièce jointe (limitation du standard,
+           pas de l'application) : l'utilisateur n'a plus qu'à coller. Si la
+           copie échoue, repli sur la révélation dans l'explorateur ;
+        3. ouvre le client e-mail par défaut, pré-rempli vers Jade.
+
+        Aucune de ces étapes n'échoue la requête : la réponse indique toujours
+        le chemin du zip et ce qui a réellement fonctionné, à charge pour
+        l'interface d'expliquer la suite à l'utilisateur.
+        """
         content = req.content.strip()
         user = _session_display_name()
         from .. import __version__
 
         subject = f"Retour Jade — {user} ({settings.client_name}, v{__version__})"
+        out = {"ok": True, "zip": "", "email": settings.feedback_email,
+               "subject": subject, "mail_opened": False, "clipboard": False,
+               "revealed": False}
 
         zip_path: Path | None = None
         try:
             zip_path = _diagnostic_zip()
+            out["zip"] = str(zip_path)
         except Exception as e:
-            log.warning("Zip de diagnostic impossible : %s", e)  # mail quand même
+            log.warning("Retour : zip de diagnostic impossible (%s)", e)  # mail quand même
 
-        body = content or ""
         if zip_path is not None:
-            body += (
-                "\n\n---\n"
-                "Merci de joindre le fichier de diagnostic affiché dans "
-                f"l'explorateur :\n{zip_path}"
-            )
-        mailto = (
-            f"mailto:{settings.feedback_email}"
-            f"?subject={urllib.parse.quote(subject)}"
-            f"&body={urllib.parse.quote(body)}"
-        )
+            out["clipboard"] = copy_file_to_clipboard(zip_path)  # journalise ses échecs
+            if not out["clipboard"]:
+                # Repli, et AVANT l'ouverture du client mail : sinon la fenêtre
+                # de l'explorateur passerait devant la fenêtre de rédaction.
+                try:
+                    reveal_path(zip_path)
+                    out["revealed"] = True
+                except Exception as e:
+                    log.warning("Retour : révélation du zip impossible (%s)", e)
+
+        note = _feedback_note(zip_path, out["clipboard"], out["revealed"])
         try:
-            open_url(mailto)
-        except OSError as e:
-            raise HTTPException(500, f"Impossible d'ouvrir le client mail : {e}")
-        if zip_path is not None:
-            try:
-                reveal_path(str(zip_path))  # explorateur ouvert sur le zip
-            except OSError:
-                pass
-        return {"ok": True, "zip": str(zip_path) if zip_path else ""}
+            open_url(_mailto_url(settings.feedback_email, subject, content, note))
+            out["mail_opened"] = True
+        except Exception as e:
+            log.warning("Retour : ouverture du client mail impossible (%s)", e)
+        log.info("Retour utilisateur : zip=%s presse-papier=%s explorateur=%s mail=%s",
+                 out["zip"] or "-", out["clipboard"], out["revealed"], out["mail_opened"])
+        return out
 
     # ------------------------------------------------------------- ask
 
@@ -2145,11 +2211,13 @@ def create_app(settings: Settings, token: str = "") -> FastAPI:
 
     def _allowed_roots() -> list[str]:
         """Racines autorisées à l'ouverture : dossiers indexés + pièces jointes +
-        fichiers créés par Jade (Documents\\Jade)."""
+        fichiers créés par Jade (Documents\\Jade) + zips de diagnostic (pour que
+        l'interface puisse rouvrir le fichier joint à un retour utilisateur)."""
         from ..filegen import OUTPUT_DIR
         from ..index_config import get_roots
 
-        roots = [settings.docs_dir, settings.user_data_dir / "attachments", OUTPUT_DIR]
+        roots = [settings.docs_dir, settings.user_data_dir / "attachments",
+                 settings.user_data_dir / "diagnostics", OUTPUT_DIR]
         roots += list(get_roots(settings))
         return [str(r.resolve()).casefold() for r in roots]
 
