@@ -306,10 +306,20 @@ class _TitleBar extends StatelessWidget {
 /// l'absence de sélection).
 const _modeKinds = ['docs', 'web', 'file'];
 
+/// Dimensions fixes des cartes de mode d'accueil : identiques quel que soit
+/// le texte (plutôt que dépendantes du contenu), pour un alignement visuel
+/// strict. La hauteur couvre icône + titre (1 ligne) + description (2
+/// lignes) avec de la marge ; les libellés sont calibrés pour ne jamais
+/// déclencher la troncature de secours (`maxLines`/`ellipsis`).
+const double _kModeCardWidth = 196;
+const double _kModeCardHeight = 156;
+
 /// Style et libellés d'un mode selon son type : icône, couleur d'accent,
 /// titre de carte, libellé court (puce du composer) et description de ce que
 /// fait le mode. Couleurs prises dans le thème (jade) : en dur, le bleu/vert
-/// restaient figés et devenaient illisibles en thème sombre.
+/// restaient figés et devenaient illisibles en thème sombre. Titres et
+/// descriptions courts par construction : ils doivent tenir dans une carte de
+/// taille fixe (voir [_kModeCardWidth]/[_kModeCardHeight]) sans troncature.
 (IconData, Color, String, String, String) _modeStyle(
     BuildContext context, String kind) {
   final jade = context.jade;
@@ -328,14 +338,14 @@ const _modeKinds = ['docs', 'web', 'file'];
         amber,
         'Créer un fichier',
         'Fichier',
-        'Jade rédige un fichier (Word, Excel…) à partir de votre demande.',
+        'Jade rédige un fichier (Word, Excel…) pour vous.',
       ),
     _ => (
         TablerIcons.fileText,
         jade.secondary,
-        'Chercher dans les documents',
+        'Vos documents',
         'Documents',
-        'Jade répond uniquement à partir de vos documents indexés.',
+        'Jade répond à partir de vos documents indexés.',
       ),
   };
 }
@@ -451,7 +461,8 @@ class _ModeCard extends StatelessWidget {
           child: AnimatedContainer(
             duration: context.motion(const Duration(milliseconds: 150)),
             curve: Curves.easeOutCubic,
-            width: 196,
+            width: _kModeCardWidth,
+            height: _kModeCardHeight,
             padding: const EdgeInsets.all(JadeSpace.lg),
             decoration: BoxDecoration(
               color: selected
@@ -487,6 +498,8 @@ class _ModeCard extends StatelessWidget {
                 ),
                 const SizedBox(height: JadeSpace.md),
                 Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: JadeType.subtitle.copyWith(color: jade.text)),
                 const SizedBox(height: JadeSpace.xs + 2),
                 Text(description,
