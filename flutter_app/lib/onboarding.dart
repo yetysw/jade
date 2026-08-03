@@ -275,6 +275,7 @@ class _Onboarding extends StatefulWidget {
 class _OnboardingState extends State<_Onboarding> {
   int _step = 0;
   final _pathCtl = TextEditingController();
+  final _nameCtl = TextEditingController();
   String? _folderNotice;
   String? _folderError;
   bool _busy = false;
@@ -284,6 +285,7 @@ class _OnboardingState extends State<_Onboarding> {
   @override
   void dispose() {
     _pathCtl.dispose();
+    _nameCtl.dispose();
     super.dispose();
   }
 
@@ -309,6 +311,14 @@ class _OnboardingState extends State<_Onboarding> {
 
   Future<void> _finish() async {
     setState(() => _busy = true);
+    final name = _nameCtl.text.trim();
+    if (name.isNotEmpty) {
+      try {
+        await widget.api.setProfile(name);
+      } catch (_) {
+        // pas bloquant : le prénom pourra être défini plus tard dans les réglages
+      }
+    }
     try {
       await widget.api.completeOnboarding();
     } catch (_) {}
@@ -487,6 +497,35 @@ class _OnboardingState extends State<_Onboarding> {
           'documents et, si besoin, sur le web, en citant toujours ses sources.',
           textAlign: TextAlign.center,
           style: JadeType.label.copyWith(color: jade.muted, height: 1.5),
+        ),
+        const SizedBox(height: JadeSpace.xl),
+        Text('Comment souhaitez-vous que Jade vous appelle ?',
+            textAlign: TextAlign.center,
+            style: JadeType.label.copyWith(color: jade.body, height: 1.45)),
+        const SizedBox(height: JadeSpace.sm),
+        TextField(
+          controller: _nameCtl,
+          onSubmitted: (_) {
+            if (!_busy) _finish();
+          },
+          textAlign: TextAlign.center,
+          decoration: InputDecoration(
+            hintText: 'Facultatif — sinon votre nom Windows',
+            isDense: true,
+            filled: true,
+            fillColor: jade.tile,
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: JadeSpace.md, vertical: JadeSpace.md),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: JadeRadius.all(JadeRadius.sm),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: JadeRadius.all(JadeRadius.sm),
+              borderSide: BorderSide(color: jade.primary, width: 1.5),
+            ),
+          ),
+          style: JadeType.label.copyWith(color: jade.text),
         ),
       ],
     );

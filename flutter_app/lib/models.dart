@@ -255,14 +255,19 @@ class IndexSettings {
       );
 }
 
-/// Suggestion d'accueil personnalisée (générée d'après l'historique).
-class Suggestion {
-  final String kind; // docs | web | file
-  final String prompt;
-  const Suggestion({required this.kind, required this.prompt});
+/// Profil utilisateur (miroir de /api/profile) : nom que Jade utilise pour
+/// s'adresser à l'utilisateur. [isCustom] indique si [displayName] a été
+/// choisi explicitement (sinon c'est le nom du compte Windows, valeur par
+/// défaut). Modifiable dans l'onboarding et les réglages.
+class Profile {
+  final String displayName;
+  final bool isCustom;
+  const Profile({required this.displayName, required this.isCustom});
 
-  factory Suggestion.fromJson(Map<String, dynamic> j) =>
-      Suggestion(kind: j['kind'] ?? 'docs', prompt: j['prompt'] ?? '');
+  factory Profile.fromJson(Map<String, dynamic> j) => Profile(
+        displayName: j['display_name'] ?? '',
+        isCustom: j['is_custom'] == true,
+      );
 }
 
 class Message {
@@ -272,6 +277,7 @@ class Message {
   List<Source>? sources;
   List<MsgAttachment> attachments;
   List<String> followups; // questions de suivi suggérées (réponse en direct)
+  List<String> replies; // réponses rapides à une question posée par Jade
   final String? createdAt;
   bool streaming;
 
@@ -282,6 +288,7 @@ class Message {
     this.sources,
     this.attachments = const [],
     this.followups = const [],
+    this.replies = const [],
     this.createdAt,
     this.streaming = false,
   });
@@ -422,6 +429,14 @@ class ProgressEvent extends AskEvent {
 class FollowupsEvent extends AskEvent {
   final List<String> questions;
   FollowupsEvent(this.questions);
+}
+
+/// Réponses rapides proposées par Jade à sa propre question (max 3, courtes).
+/// À distinguer de [FollowupsEvent] : ici ce sont des réponses à donner, pas
+/// des questions à poser.
+class RepliesEvent extends AskEvent {
+  final List<String> options;
+  RepliesEvent(this.options);
 }
 
 class ResetEvent extends AskEvent {}

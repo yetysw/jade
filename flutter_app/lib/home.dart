@@ -144,6 +144,9 @@ class HomeScreenState extends State<HomeScreen> {
         newChat();
         _refresh();
       },
+      // le nom affiché (pied de la barre latérale) doit refléter le profil
+      // dès qu'il est modifié dans les réglages, sans réinitialiser le fil.
+      onProfileChanged: _refresh,
     );
   }
 
@@ -201,6 +204,59 @@ class HomeScreenState extends State<HomeScreen> {
     if (ok == true && ctl.text.trim().isNotEmpty) {
       final f = await api.createFolder(ctl.text.trim());
       openFolders.add(f.id);
+      await _refresh();
+    }
+  }
+
+  /// Déplace une conversation vers un dossier (ou la retire si `folderId` est
+  /// nul) et déplie ce dossier pour que le résultat reste visible — sans quoi
+  /// la conversation semblait disparaître silencieusement de la liste.
+  Future<void> _moveToFolder(Conversation c, String? folderId) async {
+    await api.moveConversation(c.id, folderId);
+    if (folderId != null) openFolders.add(folderId);
+    await refreshConversations();
+  }
+
+  Future<void> _renameFolderDialog(Folder f) async {
+    final ctl = TextEditingController(text: f.name);
+    final ok = await _prompt(
+      title: 'Renommer le dossier',
+      controller: ctl,
+      confirmLabel: 'Renommer',
+    );
+    if (ok == true && ctl.text.trim().isNotEmpty) {
+      await api.renameFolder(f.id, ctl.text.trim());
+      await _refresh();
+    }
+  }
+
+  Future<void> _deleteFolderDialog(Folder f) async {
+    final jade = context.jade;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: JadeRadius.all(JadeRadius.lg)),
+        title: const Text('Supprimer le dossier ?'),
+        content: Text(
+            '« ${f.name} » sera supprimé. Les conversations qu’il contient ne '
+            'sont pas supprimées : elles redeviennent des conversations sans '
+            'dossier.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: jade.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await api.deleteFolder(f.id);
+      openFolders.remove(f.id);
       await _refresh();
     }
   }
@@ -364,25 +420,31 @@ class _Sidebar extends StatelessWidget {
       dense: true,
     ));
 
-    // dossiers
+    // dossiers — clic droit pour renommer/supprimer (sinon jamais accessible)
     for (final f in state.folders) {
       final inFolder = convs.where((c) => c.folderId == f.id).toList();
       final open = state.openFolders.contains(f.id);
-      widgets.add(_NavTile(
-        leading: Icon(open ? TablerIcons.chevronDown : TablerIcons.chevronRight,
-            size: 16, color: jade.faint),
-        icon: TablerIcons.folder,
-        iconColor: jade.secondary,
-        label: f.name,
-        bold: true,
-        trailing: _CountBadge(inFolder.length),
-        onTap: () {
-          open
-              ? state.openFolders.remove(f.id)
-              : state.openFolders.add(f.id);
-          // ignore: invalid_use_of_protected_member
-          state.setState(() {});
-        },
+      widgets.add(GestureDetector(
+        onSecondaryTapUp: (d) =>
+            _showFolderMenu(context, state, f, d.globalPosition),
+        child: _NavTile(
+          leading: Icon(
+              open ? TablerIcons.chevronDown : TablerIcons.chevronRight,
+              size: 16,
+              color: jade.faint),
+          icon: TablerIcons.folder,
+          iconColor: jade.secondary,
+          label: f.name,
+          bold: true,
+          trailing: _CountBadge(inFolder.length),
+          onTap: () {
+            open
+                ? state.openFolders.remove(f.id)
+                : state.openFolders.add(f.id);
+            // ignore: invalid_use_of_protected_member
+            state.setState(() {});
+          },
+        ),
       ));
       if (open) {
         widgets.addAll(inFolder.map((c) => Padding(
@@ -641,41 +703,162 @@ class _ConvRowState extends State<_ConvRow> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
-      child: Material(
-        color: active ? jade.primaryContainer : Colors.transparent,
-        borderRadius: JadeRadius.all(JadeRadius.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => widget.state.openConversation(c.id),
-          hoverColor: active ? Colors.transparent : jade.tile,
-          focusColor: jade.tile,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: JadeSpace.sm + 1, vertical: JadeSpace.sm + 1),
-            child: Row(
-              children: [
-                if (c.pinned) ...[
-                  Icon(TablerIcons.pin, size: 12,
-                      color: active ? jade.primary : jade.faint),
-                  const SizedBox(width: JadeSpace.xs + 1),
-                ],
-                Expanded(
-                  child: Text(
-                    c.title,
-                    overflow: TextOverflow.ellipsis,
-                    style: JadeType.label.copyWith(
-                      fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                      color: active ? jade.onPrimaryContainer : jade.body,
+      child: GestureDetector(
+        // clic droit : menu contextuel complet (renommer, déplacer, épingler,
+        // supprimer) — plus découvrable que les icônes de survol seules.
+        onSecondaryTapUp: (d) =>
+            _showConvMenu(context, widget.state, c, d.globalPosition),
+        child: Material(
+          color: active ? jade.primaryContainer : Colors.transparent,
+          borderRadius: JadeRadius.all(JadeRadius.md),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => widget.state.openConversation(c.id),
+            hoverColor: active ? Colors.transparent : jade.tile,
+            focusColor: jade.tile,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: JadeSpace.sm + 1, vertical: JadeSpace.sm + 1),
+              child: Row(
+                children: [
+                  if (c.pinned) ...[
+                    Icon(TablerIcons.pin, size: 12,
+                        color: active ? jade.primary : jade.faint),
+                    const SizedBox(width: JadeSpace.xs + 1),
+                  ],
+                  Expanded(
+                    child: Text(
+                      c.title,
+                      overflow: TextOverflow.ellipsis,
+                      style: JadeType.label.copyWith(
+                        fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                        color: active ? jade.onPrimaryContainer : jade.body,
+                      ),
                     ),
                   ),
-                ),
-                if (_hover || active) _RowActions(state: widget.state, conv: c),
-              ],
+                  if (_hover || active)
+                    _RowActions(state: widget.state, conv: c),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// Ouvre le menu contextuel (clic droit) d'une conversation : renommer,
+/// épingler, déplacer vers un dossier, supprimer. Regroupe les mêmes actions
+/// que [_RowActions] (icônes au survol) dans un seul menu, plus visible.
+Future<void> _showConvMenu(BuildContext context, HomeScreenState state,
+    Conversation c, Offset globalPosition) async {
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  final selected = await showMenu<String>(
+    context: context,
+    position: RelativeRect.fromRect(
+      globalPosition & const Size(1, 1),
+      Offset.zero & overlay.size,
+    ),
+    shape: RoundedRectangleBorder(borderRadius: JadeRadius.all(JadeRadius.md)),
+    items: [
+      PopupMenuItem(
+        value: 'rename',
+        child: _MenuRow(icon: TablerIcons.edit, label: 'Renommer'),
+      ),
+      PopupMenuItem(
+        value: 'pin',
+        child: _MenuRow(
+          icon: c.pinned ? TablerIcons.pinned : TablerIcons.pin,
+          label: c.pinned ? 'Désépingler' : 'Épingler',
+        ),
+      ),
+      ...state.folders.map((f) => PopupMenuItem(
+            value: 'folder:${f.id}',
+            child: _MenuRow(
+                icon: TablerIcons.folder, label: 'Déplacer vers « ${f.name} »'),
+          )),
+      if (c.folderId != null)
+        PopupMenuItem(
+          value: 'folder:',
+          child: _MenuRow(icon: TablerIcons.x, label: 'Retirer du dossier'),
+        ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        value: 'delete',
+        child: _MenuRow(icon: TablerIcons.trash, label: 'Supprimer', danger: true),
+      ),
+    ],
+  );
+  if (selected == null || !context.mounted) return;
+  if (selected == 'rename') {
+    await state._renameDialog(c);
+  } else if (selected == 'pin') {
+    await state.api.setFlag(c.id, 'pinned', !c.pinned);
+    await state.refreshConversations();
+  } else if (selected == 'delete') {
+    await state._deleteDialog(c);
+  } else if (selected.startsWith('folder:')) {
+    final fid = selected.substring(7);
+    await state._moveToFolder(c, fid.isEmpty ? null : fid);
+  }
+}
+
+/// Ligne icône + libellé pour les items de menu contextuel.
+class _MenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool danger;
+  const _MenuRow(
+      {required this.icon, required this.label, this.danger = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    final color = danger ? jade.danger : jade.body;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: JadeSpace.sm + 2),
+        Text(label, style: JadeType.label.copyWith(color: color)),
+      ],
+    );
+  }
+}
+
+/// Menu contextuel (clic droit) d'un dossier : renommer, supprimer. Ces
+/// actions existaient déjà côté API (`renameFolder`/`deleteFolder`) mais
+/// n'étaient reliées à aucune interface — corrigé ici.
+Future<void> _showFolderMenu(BuildContext context, HomeScreenState state,
+    Folder f, Offset globalPosition) async {
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  final selected = await showMenu<String>(
+    context: context,
+    position: RelativeRect.fromRect(
+      globalPosition & const Size(1, 1),
+      Offset.zero & overlay.size,
+    ),
+    shape: RoundedRectangleBorder(borderRadius: JadeRadius.all(JadeRadius.md)),
+    items: [
+      PopupMenuItem(
+        value: 'rename',
+        child: _MenuRow(icon: TablerIcons.edit, label: 'Renommer le dossier'),
+      ),
+      PopupMenuItem(
+        value: 'delete',
+        child: _MenuRow(
+            icon: TablerIcons.trash,
+            label: 'Supprimer le dossier',
+            danger: true),
+      ),
+    ],
+  );
+  if (selected == null || !context.mounted) return;
+  if (selected == 'rename') {
+    await state._renameFolderDialog(f);
+  } else if (selected == 'delete') {
+    await state._deleteFolderDialog(f);
   }
 }
 
@@ -702,7 +885,7 @@ class _RowActions extends StatelessWidget {
               : jade.borderStrong.withValues(alpha: 0.5),
           focusColor: jade.tile,
           child: Padding(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(JadeSpace.xs),
             child: Icon(icon, size: 15, color: danger ? jade.danger : jade.muted),
           ),
         ),
@@ -729,8 +912,8 @@ class _RowActions extends StatelessWidget {
             () => state._renameDialog(conv)),
         if (state.folders.isNotEmpty || conv.folderId != null)
           SizedBox(
-            width: 23,
-            height: 23,
+            width: JadeSpace.xxl,
+            height: JadeSpace.xxl,
             child: PopupMenuButton<String>(
               padding: EdgeInsets.zero,
               tooltip: 'Déplacer',
@@ -740,9 +923,7 @@ class _RowActions extends StatelessWidget {
                   borderRadius: JadeRadius.all(JadeRadius.md)),
               onSelected: (v) async {
                 final fid = v.substring(7);
-                await state.api
-                    .moveConversation(conv.id, fid.isEmpty ? null : fid);
-                await state.refreshConversations();
+                await state._moveToFolder(conv, fid.isEmpty ? null : fid);
               },
               itemBuilder: (ctx) => [
                 ...state.folders.map((f) => PopupMenuItem(
