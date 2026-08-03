@@ -19,11 +19,21 @@ param(
   [string]$GiteaUrl = "https://git.example.com",
   [string]$Owner    = "Jade",
   [string]$Repo     = "jade",
-  [string]$Tag      = "v1.8.0"
+  # Vide = version courante lue dans ragagent/__init__.py (evite de publier une
+  # release avec un numero fige et obsolete).
+  [string]$Tag      = ""
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
+
+if (-not $Tag) {
+  $initPy = Join-Path $root "ragagent\__init__.py"
+  $m = Select-String -Path $initPy -Pattern '__version__\s*=\s*"([^"]+)"'
+  if (-not $m) { throw "Version introuvable dans $initPy — passer -Tag explicitement." }
+  $Tag = "v" + $m.Matches[0].Groups[1].Value
+  Write-Host "Version detectee : $Tag"
+}
 $ver  = $Tag.TrimStart('v')
 $exeName = "Jade-Setup-$ver.exe"
 $exe  = Join-Path $root "dist\installer\$exeName"
