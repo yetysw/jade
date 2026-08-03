@@ -211,15 +211,17 @@ class ApiClient {
 
   Future<void> clearMemory() => _json('POST', '/api/memory/clear');
 
-  // -------------------------------------------------------- suggestions
+  // ---------------------------------------------------------------- profil
 
-  /// Suggestions d'accueil personnalisées (d'après l'historique de l'utilisateur).
-  Future<List<Suggestion>> welcomeSuggestions() async {
-    final j = await _json('GET', '/api/suggestions/welcome');
-    return ((j['suggestions'] ?? []) as List)
-        .map((s) => Suggestion.fromJson(s as Map<String, dynamic>))
-        .toList();
-  }
+  /// Nom actuellement utilisé par Jade pour s'adresser à l'utilisateur (nom
+  /// choisi ou, à défaut, nom du compte Windows).
+  Future<Profile> getProfile() async =>
+      Profile.fromJson(await _json('GET', '/api/profile'));
+
+  /// Définit le nom d'affichage. Une chaîne vide réinitialise sur le nom du
+  /// compte Windows.
+  Future<Profile> setProfile(String displayName) async => Profile.fromJson(
+      await _json('POST', '/api/profile', {'display_name': displayName}));
 
   // ---------------------------------------------------------- dossiers
 
@@ -249,10 +251,15 @@ class ApiClient {
   // ------------------------------------------------------------- ask (SSE)
 
   /// Pose une question ; émet les événements du flux SSE au fur et à mesure.
+  ///
+  /// [mode] force le canal de réponse : `docs` (documents indexés seulement),
+  /// `web` (recherche web) ou `file` (création de fichier). `null` ou `auto`
+  /// laisse le backend choisir automatiquement.
   Stream<AskEvent> ask(
     String cid,
     String question, {
     String? reqId,
+    String? mode,
     List<Map<String, String>> attachments = const [],
   }) async* {
     final req = http.Request('POST', _u('/api/conversations/$cid/ask'));
@@ -261,6 +268,7 @@ class ApiClient {
     req.body = jsonEncode({
       'question': question,
       'req_id': reqId ?? '',
+      'mode': mode ?? 'auto',
       'attachments': attachments,
     });
     final resp = await _client.send(req);
@@ -316,6 +324,10 @@ class ApiClient {
       case 'followups':
         return FollowupsEvent(((j['questions'] ?? []) as List)
             .map((q) => q.toString())
+            .toList());
+      case 'replies':
+        return RepliesEvent(((j['options'] ?? []) as List)
+            .map((o) => o.toString())
             .toList());
       case 'reset':
         return ResetEvent();

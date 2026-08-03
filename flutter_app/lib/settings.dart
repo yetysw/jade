@@ -14,13 +14,18 @@ Future<void> showSettingsDialog(
   BuildContext context, {
   required ApiClient api,
   required VoidCallback onHistoryCleared,
+  VoidCallback? onProfileChanged,
 }) {
   return showDialog(
     context: context,
     builder: (_) => Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.all(JadeSpace.xxl),
-      child: SettingsView(api: api, onHistoryCleared: onHistoryCleared),
+      child: SettingsView(
+        api: api,
+        onHistoryCleared: onHistoryCleared,
+        onProfileChanged: onProfileChanged,
+      ),
     ),
   );
 }
@@ -30,8 +35,14 @@ Future<void> showSettingsDialog(
 class SettingsView extends StatefulWidget {
   final ApiClient api;
   final VoidCallback onHistoryCleared;
+  /// Rappelé après un changement de nom affiché — permet à l'écran hôte de
+  /// rafraîchir le statut (le pied de la barre latérale affiche ce nom).
+  final VoidCallback? onProfileChanged;
   const SettingsView(
-      {super.key, required this.api, required this.onHistoryCleared});
+      {super.key,
+      required this.api,
+      required this.onHistoryCleared,
+      this.onProfileChanged});
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -40,6 +51,7 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   IndexSettings? _settings;
   HealthInfo? _health;
+  Profile? _profile;
   bool _busy = false;
   String? _rootError;
   String _notice = '';
@@ -50,6 +62,7 @@ class _SettingsViewState extends State<SettingsView> {
   final _searxngCtl = TextEditingController();
   final _cfIdCtl = TextEditingController();
   final _cfSecretCtl = TextEditingController();
+  final _nameCtl = TextEditingController();
   ConnConfig? _conn;
 
   @override
@@ -66,6 +79,7 @@ class _SettingsViewState extends State<SettingsView> {
     _searxngCtl.dispose();
     _cfIdCtl.dispose();
     _cfSecretCtl.dispose();
+    _nameCtl.dispose();
     super.dispose();
   }
 
@@ -87,6 +101,35 @@ class _SettingsViewState extends State<SettingsView> {
         _cfIdCtl.text = c.cfClientId;
       }
     } catch (_) {}
+    try {
+      final p = await widget.api.getProfile();
+      if (mounted) {
+        setState(() => _profile = p);
+        _nameCtl.text = p.isCustom ? p.displayName : '';
+      }
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------- profil
+
+  Future<void> _saveProfile([String? overrideName]) async {
+    setState(() => _busy = true);
+    try {
+      final p = await widget.api.setProfile(overrideName ?? _nameCtl.text.trim());
+      if (!mounted) return;
+      setState(() {
+        _profile = p;
+        _nameCtl.text = p.isCustom ? p.displayName : '';
+        _notice = p.isCustom
+            ? 'Jade vous appellera désormais « ${p.displayName} ».'
+            : 'Nom réinitialisé — Jade utilise votre nom Windows.';
+      });
+      widget.onProfileChanged?.call();
+    } on ApiException catch (e) {
+      setState(() => _notice = 'Enregistrement impossible : ${e.message}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _saveConfig() async {
@@ -317,6 +360,8 @@ class _SettingsViewState extends State<SettingsView> {
                 children: [
                   if (_notice.isNotEmpty) _NoticeBar(_notice),
                   _statusSection(context),
+                  const SizedBox(height: JadeSpace.xxl),
+                  _profileSection(context),
                   const SizedBox(height: JadeSpace.xxl),
                   _connSection(context),
                   const SizedBox(height: JadeSpace.xxl),
@@ -572,6 +617,66 @@ class _SettingsViewState extends State<SettingsView> {
               style: JadeType.caption
                   .merge(JadeType.tabular)
                   .copyWith(color: ok ? jade.muted : jade.danger)),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------- section profil
+
+  Widget _profileSection(BuildContext context) {
+    final jade = context.jade;
+    final p = _profile;
+    return _Card(
+      icon: TablerIcons.edit,
+      title: 'Nom affiché',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Le nom que Jade utilise pour s’adresser à vous. Laissez vide pour '
+            'utiliser le nom de votre compte Windows.',
+            style: JadeType.caption.copyWith(color: jade.muted, height: 1.5),
+          ),
+          const SizedBox(height: JadeSpace.md),
+          TextField(
+            controller: _nameCtl,
+            onSubmitted: (_) {
+              if (!_busy) _saveProfile();
+            },
+            decoration: _fieldDecoration(
+              context,
+              p == null
+                  ? '…'
+                  : (p.isCustom
+                      ? ''
+                      : 'Actuellement : « ${p.displayName} » (nom Windows)'),
+            ),
+            style: JadeType.label.copyWith(color: jade.text),
+          ),
+          const SizedBox(height: JadeSpace.md),
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: _busy ? null : () => _saveProfile(),
+                icon: const Icon(TablerIcons.circleCheck, size: 16),
+                label: const Text('Enregistrer'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: jade.primary,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: JadeSpace.lg, vertical: JadeSpace.md),
+                ),
+              ),
+              if (p?.isCustom == true) ...[
+                const SizedBox(width: JadeSpace.sm),
+                TextButton(
+                  onPressed: _busy ? null : () => _saveProfile(''),
+                  child: Text('Réinitialiser au nom Windows',
+                      style: JadeType.label.copyWith(color: jade.muted)),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

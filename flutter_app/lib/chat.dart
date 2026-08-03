@@ -30,8 +30,8 @@ class ChatView extends StatefulWidget {
   State<ChatView> createState() => ChatViewState();
 }
 
-/// Etat de [ChatView] : messages en cours, requete de streaming active,
-/// suggestions d'accueil et questions de suivi.
+/// Etat de [ChatView] : messages en cours, requete de streaming active et
+/// mode de reponse selectionne (docs | web | file | automatique).
 class ChatViewState extends State<ChatView> {
   final List<Message> _messages = [];
   final _inputCtl = TextEditingController();
@@ -43,37 +43,20 @@ class ChatViewState extends State<ChatView> {
   String? _reqId;
   String? _progress;
 
-  List<Suggestion>? _welcomeSug;
+  /// Mode de réponse forcé (docs | web | file) ; `null` = automatique. Choisi
+  /// depuis les cartes d'accueil ou la barre compacte du composer, reste actif
+  /// pour toute la conversation jusqu'à ce qu'il soit changé ou désélectionné.
+  String? _mode;
 
   bool get _welcome => _messages.isEmpty && !_streaming;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadWelcome();
-    // seconde tentative après le préchauffage des modèles (démarrage à froid :
-    // la 1re requête peut tomber pendant le warmup et renvoyer les défauts)
-    Future.delayed(const Duration(seconds: 9), () {
-      if (mounted && _welcome) _loadWelcome();
-    });
-  }
-
-  Future<void> _loadWelcome() async {
-    try {
-      final s = await widget.api.welcomeSuggestions();
-      if (mounted) setState(() => _welcomeSug = s);
-    } catch (_) {
-      // suggestions personnalisées indisponibles : l'accueil affiche les défauts
-    }
-  }
 
   void reset() {
     setState(() {
       _messages.clear();
       _title = 'Nouvelle conversation';
       _progress = null;
+      _mode = null;
     });
-    _loadWelcome(); // rafraîchir d'après l'historique mis à jour
     _inputFocus.requestFocus();
   }
 
@@ -86,8 +69,16 @@ class ChatViewState extends State<ChatView> {
         ..clear()
         ..addAll(msgs);
       _progress = null;
+      _mode = null;
     });
     _scrollToBottom();
+  }
+
+  /// Envoie directement un texte comme message utilisateur — utilisé par les
+  /// suggestions de suivi et les réponses rapides (clic = réponse).
+  void _quickSend(String text) {
+    _inputCtl.text = text;
+    _send();
   }
 
   void _scrollToBottom() {
@@ -125,7 +116,7 @@ class ChatViewState extends State<ChatView> {
     _reqId = _newReqId();
     List<Source>? sources;
     try {
-      await for (final ev in widget.api.ask(cid, q, reqId: _reqId)) {
+      await for (final ev in widget.api.ask(cid, q, reqId: _reqId, mode: _mode)) {
         if (!mounted) return;
         switch (ev) {
           case TokenEvent(:final delta):
@@ -144,11 +135,14 @@ class ChatViewState extends State<ChatView> {
                 ]);
           case FollowupsEvent(:final questions):
             setState(() => assistant.followups = questions);
+          case RepliesEvent(:final options):
+            setState(() => assistant.replies = options);
           case ResetEvent():
             setState(() {
               assistant.content = '';
               assistant.sources = null;
               assistant.followups = const [];
+              assistant.replies = const [];
               sources = null;
             });
           case NoticeEvent(:final message):
@@ -216,11 +210,9 @@ class ChatViewState extends State<ChatView> {
         Expanded(
           child: _welcome
               ? _WelcomeView(
-                  suggestions: _welcomeSug,
-                  onSuggestion: (s) {
-                    _inputCtl.text = s;
-                    _send();
-                  },
+                  mode: _mode,
+                  onToggleMode: (k) =>
+                      setState(() => _mode = _mode == k ? null : k),
                 )
               : ListView.builder(
                   controller: _scrollCtl,
@@ -236,10 +228,9 @@ class ChatViewState extends State<ChatView> {
                           message: _messages[i],
                           home: widget.home,
                           api: widget.api,
-                          onFollowup: (q) {
-                            _inputCtl.text = q;
-                            _send();
-                          },
+                          isLast: i == _messages.length - 1,
+                          onFollowup: _quickSend,
+                          onReply: _quickSend,
                         ),
                       ),
                     ),
@@ -276,6 +267,8 @@ class ChatViewState extends State<ChatView> {
               focusNode: _inputFocus,
               enabled: !_streaming,
               onSend: _send,
+              mode: _mode,
+              onModeChange: (m) => setState(() => _mode = m),
             ),
           ),
         ),
@@ -309,43 +302,52 @@ class _TitleBar extends StatelessWidget {
 
 // ================================================================ accueil
 
-/// Style d'une suggestion selon son type (icône, couleur, intitulé de carte).
-/// Couleurs prises dans le thème (jade) : en dur, le bleu/vert restaient figés
-/// et devenaient illisibles en thème sombre.
-(IconData, Color, String) _suggestionStyle(BuildContext context, String kind) {
+/// Les trois modes de réponse forcés (l'automatique n'a pas d'entrée : c'est
+/// l'absence de sélection).
+const _modeKinds = ['docs', 'web', 'file'];
+
+/// Style et libellés d'un mode selon son type : icône, couleur d'accent,
+/// titre de carte, libellé court (puce du composer) et description de ce que
+/// fait le mode. Couleurs prises dans le thème (jade) : en dur, le bleu/vert
+/// restaient figés et devenaient illisibles en thème sombre.
+(IconData, Color, String, String, String) _modeStyle(
+    BuildContext context, String kind) {
   final jade = context.jade;
   // pas de token « ambre » dans le thème : accent adapté au clair/sombre
   final amber = context.isDark ? const Color(0xFFE0A94A) : const Color(0xFFC07A12);
   return switch (kind) {
-    'web' => (TablerIcons.worldSearch, jade.primary, 'Recherche web'),
-    'file' => (TablerIcons.filePlus, amber, 'Créer un fichier'),
-    _ => (TablerIcons.fileText, jade.secondary, 'Chercher dans les documents'),
+    'web' => (
+        TablerIcons.worldSearch,
+        jade.primary,
+        'Recherche web',
+        'Web',
+        'Jade interroge le web pour une réponse à jour.',
+      ),
+    'file' => (
+        TablerIcons.filePlus,
+        amber,
+        'Créer un fichier',
+        'Fichier',
+        'Jade rédige un fichier (Word, Excel…) à partir de votre demande.',
+      ),
+    _ => (
+        TablerIcons.fileText,
+        jade.secondary,
+        'Chercher dans les documents',
+        'Documents',
+        'Jade répond uniquement à partir de vos documents indexés.',
+      ),
   };
 }
 
-const _defaultSuggestions = [
-  Suggestion(
-      kind: 'docs',
-      prompt: 'Résume la procédure de sauvegarde décrite dans nos documents.'),
-  Suggestion(
-      kind: 'web',
-      prompt:
-          'Quelles sont les dernières recommandations de sécurité Microsoft 365 ?'),
-  Suggestion(
-      kind: 'file', prompt: 'Crée un tableau Excel de suivi des incidents.'),
-];
-
 class _WelcomeView extends StatelessWidget {
-  final void Function(String) onSuggestion;
-  final List<Suggestion>? suggestions;
-  const _WelcomeView({required this.onSuggestion, this.suggestions});
+  final String? mode;
+  final void Function(String) onToggleMode;
+  const _WelcomeView({required this.mode, required this.onToggleMode});
 
   @override
   Widget build(BuildContext context) {
     final jade = context.jade;
-    final items = (suggestions == null || suggestions!.isEmpty)
-        ? _defaultSuggestions
-        : suggestions!;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(JadeSpace.xxl),
@@ -383,7 +385,8 @@ class _WelcomeView extends StatelessWidget {
               Text(
                 'Interrogez vos documents internes, lancez une recherche web ou '
                 'demandez la création d’un fichier — le tout sans qu’aucun '
-                'document ne quitte ce poste.',
+                'document ne quitte ce poste. Choisissez un mode ci-dessous, '
+                'ou laissez Jade décider automatiquement.',
                 textAlign: TextAlign.center,
                 style: JadeType.body.copyWith(color: jade.muted),
               ),
@@ -393,15 +396,17 @@ class _WelcomeView extends StatelessWidget {
                 runSpacing: JadeSpace.md,
                 alignment: WrapAlignment.center,
                 children: [
-                  for (final s in items)
+                  for (final kind in _modeKinds)
                     Builder(builder: (context) {
-                      final (icon, tint, title) = _suggestionStyle(context, s.kind);
-                      return _SuggestionCard(
+                      final (icon, tint, title, _, desc) =
+                          _modeStyle(context, kind);
+                      return _ModeCard(
                         icon: icon,
                         title: title,
-                        prompt: s.prompt,
+                        description: desc,
                         tint: tint,
-                        onTap: () => onSuggestion(s.prompt),
+                        selected: mode == kind,
+                        onTap: () => onToggleMode(kind),
                       );
                     }),
                 ],
@@ -414,17 +419,22 @@ class _WelcomeView extends StatelessWidget {
   }
 }
 
-class _SuggestionCard extends StatelessWidget {
+/// Carte-bouton d'accueil : sélectionne (ou désélectionne, si déjà actif) un
+/// mode de réponse. N'envoie plus de question toute faite — l'utilisateur
+/// écrit la sienne dans le composer, avec le mode choisi appliqué.
+class _ModeCard extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String prompt;
+  final String description;
   final Color tint;
+  final bool selected;
   final VoidCallback onTap;
-  const _SuggestionCard({
+  const _ModeCard({
     required this.icon,
     required this.title,
-    required this.prompt,
+    required this.description,
     required this.tint,
+    required this.selected,
     required this.onTap,
   });
 
@@ -434,39 +444,58 @@ class _SuggestionCard extends StatelessWidget {
     return Hoverable(
       builder: (context, hover) => GestureDetector(
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: context.motion(const Duration(milliseconds: 150)),
-          curve: Curves.easeOutCubic,
-          width: 196,
-          padding: const EdgeInsets.all(JadeSpace.lg),
-          decoration: BoxDecoration(
-            color: jade.card,
-            borderRadius: JadeRadius.all(JadeRadius.lg),
-            border: Border.all(color: hover ? jade.borderStrong : jade.border),
-            boxShadow: hover ? JadeElevation.soft(context) : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: tint.withValues(alpha: context.isDark ? 0.18 : 0.12),
-                  borderRadius: JadeRadius.all(JadeRadius.sm),
-                ),
-                child: Icon(icon, size: 18, color: tint),
+        child: Semantics(
+          button: true,
+          selected: selected,
+          label: '$title — ${selected ? "mode actif" : "activer ce mode"}',
+          child: AnimatedContainer(
+            duration: context.motion(const Duration(milliseconds: 150)),
+            curve: Curves.easeOutCubic,
+            width: 196,
+            padding: const EdgeInsets.all(JadeSpace.lg),
+            decoration: BoxDecoration(
+              color: selected
+                  ? tint.withValues(alpha: context.isDark ? 0.16 : 0.10)
+                  : jade.card,
+              borderRadius: JadeRadius.all(JadeRadius.lg),
+              border: Border.all(
+                color: selected
+                    ? tint
+                    : (hover ? jade.borderStrong : jade.border),
+                width: selected ? 1.5 : 1,
               ),
-              const SizedBox(height: JadeSpace.md),
-              Text(title,
-                  style: JadeType.subtitle.copyWith(color: jade.text)),
-              const SizedBox(height: JadeSpace.xs + 2),
-              Text(prompt,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: JadeType.caption
-                      .copyWith(color: jade.muted, height: 1.5)),
-            ],
+              boxShadow: hover && !selected ? JadeElevation.soft(context) : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: tint.withValues(alpha: context.isDark ? 0.18 : 0.12),
+                        borderRadius: JadeRadius.all(JadeRadius.sm),
+                      ),
+                      child: Icon(icon, size: 18, color: tint),
+                    ),
+                    const Spacer(),
+                    if (selected)
+                      Icon(TablerIcons.circleCheck, size: 18, color: tint),
+                  ],
+                ),
+                const SizedBox(height: JadeSpace.md),
+                Text(title,
+                    style: JadeType.subtitle.copyWith(color: jade.text)),
+                const SizedBox(height: JadeSpace.xs + 2),
+                Text(description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: JadeType.caption
+                        .copyWith(color: jade.muted, height: 1.5)),
+              ],
+            ),
           ),
         ),
       ),
@@ -503,12 +532,19 @@ class _MessageTile extends StatelessWidget {
   final Message message;
   final HomeScreenState home;
   final ApiClient api;
+  /// Vrai si ce message est le dernier du fil — les réponses rapides ne sont
+  /// affichées que sur le dernier message : dès qu'on répond (clic ou saisie
+  /// libre), un nouveau message suit et elles disparaissent naturellement.
+  final bool isLast;
   final void Function(String) onFollowup;
+  final void Function(String) onReply;
   const _MessageTile({
     required this.message,
     required this.home,
     required this.api,
+    required this.isLast,
     required this.onFollowup,
+    required this.onReply,
   });
 
   @override
@@ -566,6 +602,8 @@ class _MessageTile extends StatelessWidget {
             ),
           // fichiers créés par Jade — cartes cliquables
           ...message.attachments.map((a) => _FileCard(att: a, api: api)),
+          if (!message.streaming && isLast && message.replies.isNotEmpty)
+            _Replies(options: message.replies, onTap: onReply),
           if (!message.streaming && (message.sources?.isNotEmpty ?? false))
             Padding(
               padding: const EdgeInsets.only(top: JadeSpace.sm),
@@ -641,6 +679,80 @@ class _Followups extends StatelessWidget {
                 ),
               )),
         ],
+      ),
+    );
+  }
+}
+
+/// Réponses rapides proposées par Jade à sa propre question (max 3, courtes).
+/// À la différence de [_Followups] (des questions que l'utilisateur peut
+/// poser, présentées en liste), ce sont des réponses à donner : puces plus
+/// compactes, remplies, en ligne. Disparaissent dès qu'on a répondu (voir
+/// `isLast` dans [_MessageTile]) — le composer normal reste disponible juste
+/// en dessous pour répondre librement.
+class _Replies extends StatelessWidget {
+  final List<String> options;
+  final void Function(String) onTap;
+  const _Replies({required this.options, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    return Padding(
+      padding: const EdgeInsets.only(top: JadeSpace.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(TablerIcons.circleCheck, size: 13, color: jade.faint),
+              const SizedBox(width: JadeSpace.sm),
+              Text('RÉPONSE RAPIDE',
+                  style: JadeType.eyebrow.copyWith(color: jade.faint)),
+            ],
+          ),
+          const SizedBox(height: JadeSpace.sm),
+          Wrap(
+            spacing: JadeSpace.sm,
+            runSpacing: JadeSpace.sm,
+            children: options
+                .map((o) => _ReplyChip(text: o, onTap: () => onTap(o)))
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReplyChip extends StatelessWidget {
+  final String text;
+  final VoidCallback onTap;
+  const _ReplyChip({required this.text, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    return Hoverable(
+      builder: (context, hover) => GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: context.motion(const Duration(milliseconds: 130)),
+          padding: const EdgeInsets.symmetric(
+              horizontal: JadeSpace.lg, vertical: JadeSpace.sm + 2),
+          constraints: const BoxConstraints(maxWidth: 320),
+          decoration: BoxDecoration(
+            color: jade.primaryContainer,
+            borderRadius: JadeRadius.all(JadeRadius.pill),
+            border: Border.all(
+                color: hover ? jade.primary : Colors.transparent),
+            boxShadow: hover ? JadeElevation.soft(context) : null,
+          ),
+          child: Text(text,
+              overflow: TextOverflow.ellipsis,
+              style: JadeType.label.copyWith(
+                  color: jade.onPrimaryContainer, fontWeight: FontWeight.w600)),
+        ),
       ),
     );
   }
@@ -876,11 +988,16 @@ class _Composer extends StatelessWidget {
   final FocusNode focusNode;
   final bool enabled;
   final VoidCallback onSend;
+  /// Mode actif (docs | web | file) ; `null` = automatique.
+  final String? mode;
+  final ValueChanged<String?> onModeChange;
   const _Composer({
     required this.controller,
     required this.focusNode,
     required this.enabled,
     required this.onSend,
+    required this.mode,
+    required this.onModeChange,
   });
 
   @override
@@ -891,6 +1008,11 @@ class _Composer extends StatelessWidget {
           JadeSpace.xxl, JadeSpace.xs, JadeSpace.xxl, JadeSpace.md),
       child: Column(
         children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _ModeBar(mode: mode, onChange: onModeChange),
+          ),
+          const SizedBox(height: JadeSpace.sm),
           FocusRing(
             radius: JadeRadius.xl,
             child: Container(
@@ -946,6 +1068,104 @@ class _Composer extends StatelessWidget {
           Text('Entrée pour envoyer · Maj + Entrée pour un saut de ligne',
               style: JadeType.caption.copyWith(color: jade.faint)),
         ],
+      ),
+    );
+  }
+}
+
+/// Barre compacte de sélection de mode, juste au-dessus du champ de saisie.
+/// Reste visible et modifiable pendant toute la conversation (pas seulement à
+/// l'accueil) : cliquer un mode l'active, recliquer dessus revient à
+/// l'automatique.
+class _ModeBar extends StatelessWidget {
+  final String? mode;
+  final ValueChanged<String?> onChange;
+  const _ModeBar({required this.mode, required this.onChange});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: JadeSpace.sm,
+      runSpacing: JadeSpace.sm,
+      children: [
+        for (final kind in _modeKinds)
+          Builder(builder: (context) {
+            final (icon, tint, _, short, desc) = _modeStyle(context, kind);
+            final selected = mode == kind;
+            return _ModeChip(
+              icon: icon,
+              label: short,
+              tint: tint,
+              selected: selected,
+              tooltip: selected ? '$desc Cliquer pour revenir à l’automatique.' : desc,
+              onTap: () => onChange(selected ? null : kind),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color tint;
+  final bool selected;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _ModeChip({
+    required this.icon,
+    required this.label,
+    required this.tint,
+    required this.selected,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final jade = context.jade;
+    return Tooltip(
+      message: tooltip,
+      child: Hoverable(
+        builder: (context, hover) => GestureDetector(
+          onTap: onTap,
+          child: Semantics(
+            button: true,
+            selected: selected,
+            child: AnimatedContainer(
+              duration: context.motion(const Duration(milliseconds: 130)),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: JadeSpace.md, vertical: JadeSpace.sm),
+              decoration: BoxDecoration(
+                color: selected
+                    ? tint.withValues(
+                        alpha: context.isDark
+                            ? (hover ? 0.28 : 0.20)
+                            : (hover ? 0.16 : 0.12))
+                    : (hover ? jade.tile : Colors.transparent),
+                borderRadius: JadeRadius.all(JadeRadius.pill),
+                border: Border.all(color: selected ? tint : jade.border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 14, color: selected ? tint : jade.muted),
+                  const SizedBox(width: JadeSpace.xs + 2),
+                  Text(label,
+                      style: JadeType.label.copyWith(
+                          color: selected ? tint : jade.muted,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500)),
+                  if (selected) ...[
+                    const SizedBox(width: JadeSpace.xs),
+                    Icon(TablerIcons.x, size: 12, color: tint),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
