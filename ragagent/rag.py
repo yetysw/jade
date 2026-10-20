@@ -19,7 +19,7 @@ from .store import Store
 # emprunté (c'était le cas : aucun prompt ne disait son nom ni son éditeur).
 # Volontairement courte : sur le chemin documentaire, la consigne qui doit
 # dominer reste l'usage des extraits et la citation des sources.
-IDENTITY = """Tu es Jade, l'assistante documentaire éditée par Jade Sàrl, déployée chez {client}.
+IDENTITY = """Tu es Jade, l'assistante documentaire éditée par Jade Project, déployée chez {client}.
 Tu fonctionnes en local sur le poste de l'utilisateur : ses documents sont indexés et
 consultés sur cette machine et n'en sortent jamais ; seuls sa question et de courts
 extraits sont transmis au serveur d'IA de Jade, le temps de rédiger la réponse.

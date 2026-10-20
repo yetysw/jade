@@ -9,7 +9,7 @@
 
 #define AppName "Jade"
 #define AppVersion "1.10.1"
-#define AppPublisher "Jade Sàrl"
+#define AppPublisher "Jade Project"
 ; exécutable principal = application native Flutter (lance le backend sidecar)
 #define AppExeName "jade.exe"
 #define RepoRoot ".."
