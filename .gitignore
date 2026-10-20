@@ -37,3 +37,9 @@ licsrv/*.db-*
 licsrv/data/
 licsrv/.env
 dist2/
+
+# Outils locaux
+.claude/
+*.pem
+*.key
+*.kdbx
