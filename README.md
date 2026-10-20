@@ -8,7 +8,7 @@
   ![Version](https://img.shields.io/badge/version-1.10.1-00357F)
   ![Plateforme](https://img.shields.io/badge/Windows-10%2F11-informational)
   ![UI](https://img.shields.io/badge/interface-Flutter%20native-blue)
-  ![Licence](https://img.shields.io/badge/licence-Jade%20S%C3%A0rl-lightgrey)
+  ![Licence](https://img.shields.io/badge/licence-MIT-green)
 </div>
 
 Jade indexe les documents d'une entreprise sur le poste ou le serveur du client,
@@ -400,4 +400,6 @@ accès à la passerelle Cloudflare hors Jade. Mesures d'exploitation :
 
 ## Licence
 
-Logiciel interne Jade Sàrl. Tous droits réservés.
+MIT — voir [LICENSE](LICENSE). Copyright (c) 2026 Jade Sàrl.
+
+La police Geomini est distribuée sous SIL OFL 1.1 (voir `flutter_app/assets/fonts/Geomini-OFL.txt`) ; les icônes Tabler sous licence MIT.
