@@ -103,4 +103,4 @@ uvicorn licsrv.app:app --host 127.0.0.1 --port 8790
 Faite (Jade ≥ 1.8.0) : `ragagent/licensing.py` vérifie l'abonnement au démarrage +
 périodiquement, valide le JWT **hors ligne**, tolère les coupures (grâce), et
 expose l'état via `/api/status` + `/api/license`. Runbook d'exploitation complet
-(facturation manuelle Odoo) : [`docs/deploiement-licences.md`](../docs/deploiement-licences.md).
+(facturation manuelle).
