@@ -400,6 +400,6 @@ accès à la passerelle Cloudflare hors Jade. Mesures d'exploitation :
 
 ## Licence
 
-MIT — voir [LICENSE](LICENSE). Copyright (c) 2026 Jade Sàrl.
+MIT — voir [LICENSE](LICENSE). Copyright (c) 2026 YETY Sàrl.
 
 La police Geomini est distribuée sous SIL OFL 1.1 (voir `flutter_app/assets/fonts/Geomini-OFL.txt`) ; les icônes Tabler sous licence MIT.
