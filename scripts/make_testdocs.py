@@ -112,7 +112,7 @@ def make_pdf_contrat(path: Path) -> None:
         Paragraph("Contrat de maintenance informatique", styles["Title"]),
         Spacer(1, 12),
         Paragraph(
-            "Entre Fiduciaire Exemple SA (le Client) et Jade Sàrl (le Prestataire), "
+            "Entre Fiduciaire Exemple SA (le Client) et Jade Project (le Prestataire), "
             "il est convenu ce qui suit.", styles["Normal"]),
         Spacer(1, 8),
         Paragraph("Article 1 — Périmètre", styles["Heading2"]),

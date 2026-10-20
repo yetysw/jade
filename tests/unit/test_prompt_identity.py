@@ -24,7 +24,7 @@ def test_identite_presente_sur_tous_les_chemins():
     for role in ROLE_PROMPTS:
         out = rag.system_prompt(role, SETTINGS)
         assert "Jade" in out
-        assert "Jade Sàrl" in out
+        assert "Jade Project" in out
         assert "en local" in out
         assert "ACME" in out  # nom du client injecté
 

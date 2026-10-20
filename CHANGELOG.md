@@ -30,7 +30,7 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 ## 1.10.0 — 🚧 dev : ⭐ Jade sait qui elle est, modes de recherche et réponses rapides
 
 - ⭐ **Identité de l'assistant** : Jade sait désormais qu'elle s'appelle Jade,
-  qu'elle est éditée par Jade Sàrl et qu'elle fonctionne en local. L'identité est
+  qu'elle est éditée par Jade Project et qu'elle fonctionne en local. L'identité est
   assemblée en un point unique (`rag.system_prompt`) et injectée dans tous les
   chemins où elle s'adresse à l'utilisateur (documentaire, web, général,
   smalltalk) — sans toucher aux appels utilitaires (routeur, titres, mémoire).
