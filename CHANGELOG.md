@@ -7,9 +7,9 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
 
 ---
 
-## 1.10.1 — 🚧 dev : correctif bloquant au démarrage après installation
+## 1.10.1 — dev : correctif bloquant au démarrage après installation
 
-- 🔴 **L'application ne démarrait plus après installation** (`PermissionError` sur
+- **L'application ne démarrait plus après installation** (`PermissionError` sur
   `C:\Program Files\Jade\backend\.env`). L'installateur posait une ACL limitée à
   `SYSTEM` + `Administrateurs` ; or le backend est lancé **sans élévation** et,
   sous UAC, même un compte administrateur reçoit un **jeton filtré** qui
@@ -27,14 +27,14 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
   verrou Windows sur `dist\Jade` ; script de publication des releases nettoyé
   (un caractère non-ASCII cassait tout le parsing sous PowerShell 5.1).
 
-## 1.10.0 — 🚧 dev : ⭐ Jade sait qui elle est, modes de recherche et réponses rapides
+## 1.10.0 — dev : Jade sait qui elle est, modes de recherche et réponses rapides
 
-- ⭐ **Identité de l'assistant** : Jade sait désormais qu'elle s'appelle Jade,
+- **Identité de l'assistant** : Jade sait désormais qu'elle s'appelle Jade,
   qu'elle est éditée par Jade Project et qu'elle fonctionne en local. L'identité est
   assemblée en un point unique (`rag.system_prompt`) et injectée dans tous les
   chemins où elle s'adresse à l'utilisateur (documentaire, web, général,
   smalltalk) — sans toucher aux appels utilitaires (routeur, titres, mémoire).
-- ⭐ **Nom de l'utilisateur** : saisie facultative au premier lancement
+- **Nom de l'utilisateur** : saisie facultative au premier lancement
   (« Comment souhaitez-vous que Jade vous appelle ? ») et modifiable dans les
   réglages. Endpoints `GET`/`POST` `/api/profile` ; le nom prime partout sur le
   compte Windows.
@@ -43,12 +43,12 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
     phrases (« Je m'appelle Léo ») comme des faits **sur l'utilisateur**.
     L'extraction refuse désormais les propos de l'assistant à la 1re personne, et
     le nom déclaré fait foi sur tout fait mémorisé.
-- ⭐ **Modes de recherche explicites** : les trois cartes d'accueil ne lancent
+- **Modes de recherche explicites** : les trois cartes d'accueil ne lancent
   plus de question pré-remplie — elles **sélectionnent un mode**
   (`documents` / `web` / `créer un fichier`), et l'utilisateur écrit sa propre
   question. Le mode reste visible et modifiable en cours de conversation, avec
   retour au mode automatique en un clic. Champ `mode` sur `/ask`.
-- ⭐ **Réponses rapides** : quand Jade pose une question, l'interface propose
+- **Réponses rapides** : quand Jade pose une question, l'interface propose
   jusqu'à 3 réponses cliquables (générées par le petit modèle), le champ de
   saisie restant disponible pour répondre librement. Événement SSE `replies`.
 - **Dossiers de conversations** : deux correctifs — déplacer une conversation
@@ -58,7 +58,7 @@ Versionnage **sémantique** `MAJEUR.MINEUR.CORRECTIF` :
   dossiers.
 - **Tests** : 76 → **114**.
 
-## 1.9.1 — 🚧 dev : robustesse et sécurité (audit multi-agents)
+## 1.9.1 — dev : robustesse et sécurité (audit multi-agents)
 
 Correctifs issus d'une passe d'équipe d'agents (security-watch, backend-rag,
 qa-tests, ui-flutter) sur les nouveautés 1.9.0.
@@ -83,23 +83,23 @@ qa-tests, ui-flutter) sur les nouveautés 1.9.0.
 - **Interface** (`ui-flutter`) : animation des points d'onboarding gatée par
   `context.motion` (respect de « réduire les animations »).
 
-## 1.9.0 — 🚧 dev : ⭐ Autonomie du poste (santé, sauvegarde, 1er lancement, réglages de connexion)
+## 1.9.0 — dev : Autonomie du poste (santé, sauvegarde, 1er lancement, réglages de connexion)
 
-- ⭐ **Panneau « État du système »** (réglages) + **bandeau d'alerte rouge**
+- **Panneau « État du système »** (réglages) + **bandeau d'alerte rouge**
   (accueil) : serveur d'IA joignable, modèles prêts, espace disque, index.
   Contrôle de santé au lancement et rafraîchissement périodique. Endpoint
   `/api/health` et bloc `health` dans `/api/status`.
-- ⭐ **Sauvegarde et migration des conversations** : export **portable**
+- **Sauvegarde et migration des conversations** : export **portable**
   (déchiffré) dans un fichier `.jadebak`, restauration **re-chiffrée** avec la
   clé DPAPI de la machine cible (une simple copie de `chats.db` ne migrerait pas,
   le chiffrement étant lié au compte Windows). Boutons dédiés dans les réglages,
   fichier géré par l'utilisateur. Endpoints `/api/backup` et `/api/restore`.
-- ⭐ **Premier lancement guidé** : écran d'**acceptation des CGU + politique de
+- **Premier lancement guidé** : écran d'**acceptation des CGU + politique de
   confidentialité** (documents embarqués, adaptés à la nLPD suisse) puis
   **onboarding** (présentation, choix d'un dossier, première question). Endpoints
   `/api/onboarding*` ; version légale suivie pour redemander l'accord si le texte
   change.
-- ⭐ **Édition des identifiants de connexion dans les réglages** (adresses des
+- **Édition des identifiants de connexion dans les réglages** (adresses des
   services + service token Cloudflare Access) : plus besoin de réinstaller ni
   d'éditer le `.env` à la main. Écriture du `.env`, **scellement DPAPI** et
   **application à chaud** (sans redémarrage). Endpoints `GET`/`POST` `/api/config`.
@@ -111,9 +111,9 @@ qa-tests, ui-flutter) sur les nouveautés 1.9.0.
 - **Build** : `jwt`/`cryptography` embarqués de façon fiable dans le bundle
   PyInstaller ; documents légaux inclus dans l'exécutable.
 
-## 1.8.0 — 🚧 dev : ⭐ Système de licences (optionnel)
+## 1.8.0 — dev : Système de licences (optionnel)
 
-- ⭐ **Serveur de licences `licsrv/`** (interne, jamais livré) : FastAPI + SQLite,
+- **Serveur de licences `licsrv/`** (interne, jamais livré) : FastAPI + SQLite,
   **JWT Ed25519**, CLI d'admin (`add`/`extend`/`revoke`/`list`), secret client
   haché (PBKDF2), **aucune PII**, réponse d'erreur constante (pas d'oracle). À
   héberger derrière Cloudflare Access comme le LLM/SearXNG.
@@ -136,13 +136,13 @@ réserve (documenté) si un besoin multi-tenant / conformité apparaît.*
 
 ---
 
-## 1.7.0 — 🚧 dev : ⭐ Durcissement sécurité (audit) + robustesse LLM
+## 1.7.0 — dev : Durcissement sécurité (audit) + robustesse LLM
 
 Issu d'un audit par une équipe de 7 sous-agents, re-validé par des agents
 sécurité et QA.
 
 **Sécurité**
-- ⭐ **Isolation inter-session RDS** : l'API locale exige désormais un **jeton de
+- **Isolation inter-session RDS** : l'API locale exige désormais un **jeton de
   session** (`X-Jade-Token`, comparaison constant-time) sur toutes les routes
   `/api/*`. Le jeton est généré par backend, publié dans `backend.json` (ACL
   par-utilisateur) et injecté par l'app. Sur RDS le loopback est commun aux
@@ -176,9 +176,9 @@ nouvelle archive.*
 
 ---
 
-## 1.6.0 — 🚧 dev : ⭐ Durcissement sécurité (RDS) + retour par e-mail
+## 1.6.0 — dev : Durcissement sécurité (RDS) + retour par e-mail
 
-- ⭐ **Isolation par session RDS** : le backend choisit un **port libre par
+- **Isolation par session RDS** : le backend choisit un **port libre par
   session** (`UI_PORT=auto`) et le publie dans `%LOCALAPPDATA%\Jade\backend.json` ;
   l'app Flutter découvre ce port au démarrage. Fini le backend unique partagé
   entre utilisateurs (conversations, mémoire et **droits NTFS** d'autrui).
@@ -205,7 +205,7 @@ nouvelle archive.*
 
 ## 1.5.0 — dev (non publiée) : réglages sans mot de passe (retour Resend, remplacé en 1.6.0)
 
-- ⭐ **Bouton « Donner mon avis »** (barre latérale) : le message part
+- **Bouton « Donner mon avis »** (barre latérale) : le message part
   directement à `feedback@example.com` via l'**API Resend** (clé saisie à
   l'installation), avec nom d'utilisateur, version et client en pied de message.
   Sans clé configurée : repli sur le client mail local. Endpoint
@@ -272,9 +272,9 @@ nouvelle archive.*
 
 ---
 
-## 1.4.0 — ⭐ Démarrage progressif + installateur protégé
+## 1.4.0 — Démarrage progressif + installateur protégé
 
-- ⭐ **Écran de démarrage avec progression** : le téléchargement des modèles de
+- **Écran de démarrage avec progression** : le téléchargement des modèles de
   recherche (au 1er lancement, ~2 Go) et leur chargement ne **bloquent plus** le
   moteur (chargement **paresseux** de l'embedder). L'application affiche une
   **barre de progression + un mini-journal** de ce qui se passe (téléchargement
@@ -302,9 +302,9 @@ nouvelle archive.*
 
 ---
 
-## 1.3.0 — ⭐ Mises à jour automatiques (releases Gitea)
+## 1.3.0 — Mises à jour automatiques (releases Gitea)
 
-- ⭐ **Détection de mise à jour** côté backend : interroge la dernière *release*
+- **Détection de mise à jour** côté backend : interroge la dernière *release*
   du dépôt Gitea (`GITEA_API_URL` / `GITEA_REPO`, jeton facultatif) et compare
   en *semver*. Résultat mis en cache 1 h, non bloquant, dégrade proprement hors
   ligne.
@@ -321,9 +321,9 @@ nouvelle archive.*
 
 ---
 
-## 1.2.0 — 🚧 dev : ⭐ Base multiplateforme (Windows · macOS · Linux)
+## 1.2.0 — dev : Base multiplateforme (Windows · macOS · Linux)
 
-- ⭐ **Portage du backend** vers des solutions communes aux 3 OS (pas de variante
+- **Portage du backend** vers des solutions communes aux 3 OS (pas de variante
   « grandement différente ») :
   - ouverture fichiers / URL / dossiers portable (`openers.py` : `startfile` /
     `open` / `xdg-open`) ;
@@ -339,9 +339,9 @@ nouvelle archive.*
 
 ---
 
-## 1.1.0 — 🚧 dev : logo spirale + animation
+## 1.1.0 — dev : logo spirale + animation
 
-- ⭐ **Logo** : retour au **logo spirale** de Jade partout (application, icône
+- **Logo** : retour au **logo spirale** de Jade partout (application, icône
   .exe / barre des tâches, installateur, dépôt). La gemme bleue est retirée.
 - **Animation de génération** : le logo **tourne** pendant que Jade réfléchit /
   répond (respecte « réduire les animations »).
