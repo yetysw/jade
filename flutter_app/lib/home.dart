@@ -610,19 +610,19 @@ class _SearchField extends StatelessWidget {
         hintStyle: JadeType.label.copyWith(color: jade.faint),
         prefixIcon: Icon(TablerIcons.search, size: 17, color: jade.faint),
         prefixIconConstraints:
-            const BoxConstraints(minWidth: 38, minHeight: 34),
+            const BoxConstraints(minWidth: 40, minHeight: 40),
         isDense: true,
         filled: true,
         fillColor: jade.tile,
         contentPadding:
-            const EdgeInsets.symmetric(vertical: JadeSpace.sm + 2),
+            const EdgeInsets.symmetric(vertical: JadeSpace.md),
         enabledBorder: OutlineInputBorder(
           borderRadius: JadeRadius.all(JadeRadius.md),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: JadeRadius.all(JadeRadius.md),
-          borderSide: BorderSide(color: jade.primary, width: 1.5),
+          borderSide: BorderSide(color: jade.accent, width: 1.5),
         ),
       ),
     );
@@ -683,7 +683,7 @@ class _FolderTile extends StatelessWidget {
                 color: hovering ? jade.primaryContainer : Colors.transparent,
                 borderRadius: JadeRadius.all(JadeRadius.md),
                 border: Border.all(
-                    color: hovering ? jade.primary : Colors.transparent,
+                    color: hovering ? jade.accent : Colors.transparent,
                     width: 1.5),
               ),
               child: _NavTile(
@@ -735,7 +735,7 @@ class _SectionDropTarget extends StatelessWidget {
               color: hovering ? jade.primaryContainer : Colors.transparent,
               borderRadius: JadeRadius.all(JadeRadius.sm),
               border: Border.all(
-                  color: hovering ? jade.primary : Colors.transparent,
+                  color: hovering ? jade.accent : Colors.transparent,
                   width: 1.5),
             ),
             child: SectionLabel(text),
@@ -846,7 +846,7 @@ class _ConvRowState extends State<_ConvRow> {
                 children: [
                   if (c.pinned) ...[
                     Icon(TablerIcons.pin, size: 12,
-                        color: active ? jade.primary : jade.faint),
+                        color: active ? jade.accent : jade.faint),
                     const SizedBox(width: JadeSpace.xs + 1),
                   ],
                   Expanded(
@@ -1129,7 +1129,7 @@ class _LicenseBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final jade = context.jade;
-    final color = info.isBlocking ? jade.danger : jade.secondary;
+    final color = info.isBlocking ? jade.danger : jade.advisory;
     return Container(
       padding: const EdgeInsets.symmetric(
           horizontal: JadeSpace.md, vertical: JadeSpace.sm + 1),

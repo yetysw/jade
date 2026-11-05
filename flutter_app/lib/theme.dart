@@ -1,8 +1,10 @@
-/// Thème Jade — palette sémantique « quiet document intelligence ».
+/// Thème Jade — jetons de couleur communs aux applications yety.
 ///
-/// Bleu profond Jade (#00357F) comme voix unique du produit ; surfaces tonales
-/// (canvas → panneau → tuile → carte), contours en cheveu, rampe d'encre à
-/// quatre niveaux. Voir `.claude/skills/jade-ui-design`.
+/// Sombre d'abord : terrain quasi noir, surfaces neutres, contours en cheveu.
+/// Le bleu yety #004AAD porte les boutons et surfaces principales (texte blanc,
+/// contraste 8:1) ; #7AA7F0 sert au texte d'accent et aux liens sur fond sombre.
+/// Les teintes de statut gardent leur sens. Aucun composant ne code de couleur
+/// en dur : tout passe par `context.jade`.
 library;
 
 import 'package:flutter/material.dart';
@@ -19,13 +21,16 @@ class JadeColors extends ThemeExtension<JadeColors> {
   final Color body; // texte courant
   final Color muted; // texte secondaire
   final Color faint; // texte tertiaire
-  final Color primary; // voix du produit
+  final Color primary; // marque yety #004AAD : boutons, surfaces principales
+  final Color accent; // texte d'accent, liens, icônes actives (lisible sur le fond)
   final Color primaryHover;
-  final Color primaryContainer; // fond tonal de l'accent
+  final Color onPrimary; // texte et icônes posés sur `primary`
+  final Color primaryContainer; // fond tonal de la marque (sélection, survol)
   final Color onPrimaryContainer;
-  final Color secondary; // documents / citations (teal)
+  final Color secondary; // documents / citations / liens (info)
   final Color success;
-  final Color danger;
+  final Color advisory; // avertissement
+  final Color danger; // pire cas : à utiliser avec parcimonie
   final Color ring; // anneau de focus clavier
 
   const JadeColors({
@@ -40,18 +45,18 @@ class JadeColors extends ThemeExtension<JadeColors> {
     required this.muted,
     required this.faint,
     required this.primary,
+    required this.accent,
     required this.primaryHover,
+    required this.onPrimary,
     required this.primaryContainer,
     required this.onPrimaryContainer,
     required this.secondary,
     required this.success,
+    required this.advisory,
     required this.danger,
     required this.ring,
   });
 
-  // Langage chromatique : bleu Jade = ancre (agir sur le système) ; vert jade
-  // = couleur vivante du produit (documents, savoir, confiance). Surfaces en
-  // papier neutre légèrement chaud plutôt que gris Material par défaut.
   static const light = JadeColors(
     bg: Color(0xFFFCFCFB),
     panel: Color(0xFFF5F4F1),
@@ -62,36 +67,42 @@ class JadeColors extends ThemeExtension<JadeColors> {
     text: Color(0xFF1A1A17),
     body: Color(0xFF45443E),
     muted: Color(0xFF6F6E66),
-    faint: Color(0xFF9C9A90),
-    primary: Color(0xFF00357F),
-    primaryHover: Color(0xFF002B67),
+    faint: Color(0xFF76746B),
+    primary: Color(0xFF004AAD),
+    accent: Color(0xFF004AAD),
+    primaryHover: Color(0xFF003A8A),
+    onPrimary: Color(0xFFFFFFFF),
     primaryContainer: Color(0xFFE4ECF9),
     onPrimaryContainer: Color(0xFF00265F),
-    secondary: Color(0xFF0C7C5A), // jade
+    secondary: Color(0xFF004AAD), // info
     success: Color(0xFF0C7C5A),
+    advisory: Color(0xFFC07A12),
     danger: Color(0xFFB23A2C),
-    ring: Color(0x5500357F),
+    ring: Color(0xFF004AAD),
   );
 
   static const dark = JadeColors(
-    bg: Color(0xFF0C0F13),
-    panel: Color(0xFF12161C),
-    tile: Color(0xFF1C222B),
-    card: Color(0xFF161B22),
-    border: Color(0xFF242B35),
-    borderStrong: Color(0xFF333B47),
+    bg: Color(0xFF07080A),
+    panel: Color(0xFF0B0D10),
+    tile: Color(0xFF111419),
+    card: Color(0xFF0B0D10),
+    border: Color(0xFF16191E),
+    borderStrong: Color(0xFF23272E),
     text: Color(0xFFECEEF1),
     body: Color(0xFFC2C8D0),
-    muted: Color(0xFF929AA4),
-    faint: Color(0xFF6A717B),
-    primary: Color(0xFF6AA5FF),
-    primaryHover: Color(0xFF89B8FF),
-    primaryContainer: Color(0xFF10305C),
+    muted: Color(0xFF8A919C),
+    faint: Color(0xFF7A818C),
+    primary: Color(0xFF004AAD),
+    accent: Color(0xFF7AA7F0),
+    primaryHover: Color(0xFF0A5CCB),
+    onPrimary: Color(0xFFFFFFFF),
+    primaryContainer: Color(0xFF0E2A52),
     onPrimaryContainer: Color(0xFFCFE0FF),
-    secondary: Color(0xFF34C89A), // jade lumineux
-    success: Color(0xFF34C89A),
-    danger: Color(0xFFE77E6E),
-    ring: Color(0x886AA5FF),
+    secondary: Color(0xFF7AA7F0), // info
+    success: Color(0xFF2FD17C),
+    advisory: Color(0xFFF2B033),
+    danger: Color(0xFFFF5C5C),
+    ring: Color(0xFF7AA7F0),
   );
 
   @override
@@ -134,11 +145,16 @@ String fileTypeLabel(String name) {
 ThemeData buildTheme(Brightness brightness) {
   final jade = brightness == Brightness.light ? JadeColors.light : JadeColors.dark;
   final scheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF00357F),
+    seedColor: const Color(0xFF004AAD),
     brightness: brightness,
     surface: jade.bg,
     primary: jade.primary,
+    onPrimary: jade.onPrimary,
+    error: jade.danger,
   );
+  // Cibles de clic d'au moins 40 px et rayon de bouton de 8 px, partout.
+  const minTarget = Size(40, 40);
+  final buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(8));
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
@@ -147,7 +163,29 @@ ThemeData buildTheme(Brightness brightness) {
     fontFamily: 'Geomini',
     extensions: [jade],
     splashFactory: NoSplash.splashFactory,
+    focusColor: jade.ring.withValues(alpha: 0.18),
     dividerTheme: DividerThemeData(color: jade.border, thickness: 1, space: 1),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: minTarget,
+        shape: buttonShape,
+        backgroundColor: jade.primary,
+        foregroundColor: jade.onPrimary,
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        minimumSize: minTarget,
+        shape: buttonShape,
+        side: BorderSide(color: jade.borderStrong),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(minimumSize: minTarget, shape: buttonShape),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(minimumSize: minTarget),
+    ),
     tooltipTheme: TooltipThemeData(
       waitDuration: const Duration(milliseconds: 450),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -155,10 +193,7 @@ ThemeData buildTheme(Brightness brightness) {
         color: jade.text.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(7),
       ),
-      textStyle: TextStyle(
-        fontSize: 12,
-        color: brightness == Brightness.light ? Colors.white : jade.bg,
-      ),
+      textStyle: TextStyle(fontSize: 12, color: jade.bg),
     ),
   );
 }

@@ -250,7 +250,7 @@ class _DocButton extends StatelessWidget {
       icon: Icon(icon, size: 16),
       label: Align(alignment: Alignment.centerLeft, child: Text(label)),
       style: OutlinedButton.styleFrom(
-        foregroundColor: jade.primary,
+        foregroundColor: jade.accent,
         side: BorderSide(color: jade.borderStrong),
         padding: const EdgeInsets.symmetric(
             horizontal: JadeSpace.lg, vertical: JadeSpace.md),
@@ -450,7 +450,7 @@ class _OnboardingState extends State<_Onboarding> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: JadeRadius.all(JadeRadius.sm),
-              borderSide: BorderSide(color: jade.primary, width: 1.5),
+              borderSide: BorderSide(color: jade.accent, width: 1.5),
             ),
           ),
           style: JadeType.label.copyWith(color: jade.text),
@@ -463,7 +463,7 @@ class _OnboardingState extends State<_Onboarding> {
             icon: const Icon(TablerIcons.folderPlus, size: 16),
             label: const Text('Ajouter ce dossier'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: jade.primary,
+              foregroundColor: jade.accent,
               side: BorderSide(color: jade.borderStrong),
             ),
           ),
@@ -523,7 +523,7 @@ class _OnboardingState extends State<_Onboarding> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: JadeRadius.all(JadeRadius.sm),
-              borderSide: BorderSide(color: jade.primary, width: 1.5),
+              borderSide: BorderSide(color: jade.accent, width: 1.5),
             ),
           ),
           style: JadeType.label.copyWith(color: jade.text),
@@ -539,7 +539,7 @@ class _OnboardingState extends State<_Onboarding> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: jade.primary),
+          Icon(icon, size: 18, color: jade.accent),
           const SizedBox(width: JadeSpace.md),
           Expanded(
             child: Text(text,

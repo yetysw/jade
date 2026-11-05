@@ -69,7 +69,7 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
           RoundedRectangleBorder(borderRadius: JadeRadius.all(JadeRadius.lg)),
       title: Row(
         children: [
-          Icon(TablerIcons.send, size: 19, color: jade.primary),
+          Icon(TablerIcons.send, size: 19, color: jade.accent),
           const SizedBox(width: JadeSpace.md),
           const Text('Votre avis compte'),
         ],
@@ -135,7 +135,7 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: JadeRadius.all(JadeRadius.sm),
-              borderSide: BorderSide(color: jade.primary, width: 1.5),
+              borderSide: BorderSide(color: jade.accent, width: 1.5),
             ),
           ),
         ),

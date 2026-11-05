@@ -39,7 +39,7 @@ class JadeApp extends StatefulWidget {
 
 /// Etat de [JadeApp] : conserve le [ThemeMode] courant et le rafraichit.
 class JadeAppState extends State<JadeApp> {
-  ThemeMode _mode = ThemeMode.system;
+  ThemeMode _mode = ThemeMode.dark; // sombre d'abord
 
   ThemeMode get themeMode => _mode;
 
@@ -186,7 +186,7 @@ class _BootState extends State<_Boot> {
             value: init?.fraction,
             minHeight: 6,
             backgroundColor: jade.tile,
-            valueColor: AlwaysStoppedAnimation(jade.primary),
+            valueColor: AlwaysStoppedAnimation(jade.accent),
           ),
         ),
       ),

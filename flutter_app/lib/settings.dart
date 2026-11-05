@@ -338,7 +338,7 @@ class _SettingsViewState extends State<SettingsView> {
                 JadeSpace.xxl, JadeSpace.lg, JadeSpace.md, JadeSpace.md),
             child: Row(
               children: [
-                Icon(TablerIcons.settings, size: 19, color: jade.primary),
+                Icon(TablerIcons.settings, size: 19, color: jade.accent),
                 const SizedBox(width: JadeSpace.md),
                 Text('Réglages',
                     style: JadeType.title.copyWith(color: jade.text)),
@@ -461,7 +461,7 @@ class _SettingsViewState extends State<SettingsView> {
               icon: const Icon(TablerIcons.folderPlus, size: 16),
               label: const Text('Ajouter'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: jade.primary,
+                foregroundColor: jade.accent,
                 side: BorderSide(color: jade.borderStrong),
                 padding: const EdgeInsets.symmetric(
                     horizontal: JadeSpace.md, vertical: JadeSpace.md),
@@ -515,14 +515,9 @@ class _SettingsViewState extends State<SettingsView> {
         ),
         child: Row(
           children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: r.online ? jade.success : jade.faint,
-                shape: BoxShape.circle,
-              ),
-            ),
+            // statut : icône + mot, jamais la couleur seule
+            Icon(r.online ? TablerIcons.circleCheck : TablerIcons.alertCircle,
+                size: 15, color: r.online ? jade.success : jade.faint),
             const SizedBox(width: JadeSpace.md),
             Expanded(
               child: Text(r.path,
@@ -533,7 +528,7 @@ class _SettingsViewState extends State<SettingsView> {
               Padding(
                 padding: const EdgeInsets.only(right: JadeSpace.sm),
                 child: Text('hors ligne',
-                    style: JadeType.caption.copyWith(color: jade.faint)),
+                    style: JadeType.caption.copyWith(color: jade.muted)),
               ),
             _IconBtn(
               icon: TablerIcons.trash,
@@ -604,11 +599,9 @@ class _SettingsViewState extends State<SettingsView> {
       padding: const EdgeInsets.only(bottom: JadeSpace.sm),
       child: Row(
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
+          // statut : icône + valeur texte, jamais la couleur seule
+          Icon(ok ? TablerIcons.circleCheck : TablerIcons.alertTriangle,
+              size: 15, color: color),
           const SizedBox(width: JadeSpace.md),
           Expanded(
             child: Text(label, style: JadeType.label.copyWith(color: jade.body)),
@@ -804,7 +797,7 @@ class _SettingsViewState extends State<SettingsView> {
                 icon: const Icon(TablerIcons.upload, size: 16),
                 label: const Text('Restaurer'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: jade.primary,
+                  foregroundColor: jade.accent,
                   side: BorderSide(color: jade.borderStrong),
                   padding: const EdgeInsets.symmetric(
                       horizontal: JadeSpace.md, vertical: JadeSpace.md),
@@ -861,7 +854,7 @@ class _SettingsViewState extends State<SettingsView> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: JadeRadius.all(JadeRadius.sm),
-        borderSide: BorderSide(color: jade.primary, width: 1.5),
+        borderSide: BorderSide(color: jade.accent, width: 1.5),
       ),
     );
   }
@@ -991,7 +984,7 @@ class _IconBtn extends StatelessWidget {
               ? jade.danger.withValues(alpha: 0.14)
               : jade.tile,
           child: Padding(
-            padding: const EdgeInsets.all(JadeSpace.sm),
+            padding: const EdgeInsets.all(JadeSpace.md),
             child: Icon(icon,
                 size: 16, color: danger ? jade.danger : jade.muted),
           ),

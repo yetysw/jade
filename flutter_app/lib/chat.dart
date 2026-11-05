@@ -323,19 +323,17 @@ const double _kModeCardHeight = 156;
 (IconData, Color, String, String, String) _modeStyle(
     BuildContext context, String kind) {
   final jade = context.jade;
-  // pas de token « ambre » dans le thème : accent adapté au clair/sombre
-  final amber = context.isDark ? const Color(0xFFE0A94A) : const Color(0xFFC07A12);
   return switch (kind) {
     'web' => (
         TablerIcons.worldSearch,
-        jade.primary,
+        jade.accent,
         'Recherche web',
         'Web',
         'Jade interroge le web pour une réponse à jour.',
       ),
     'file' => (
         TablerIcons.filePlus,
-        amber,
+        jade.advisory,
         'Créer un fichier',
         'Fichier',
         'Jade rédige un fichier (Word, Excel…) pour vous.',
@@ -366,23 +364,13 @@ class _WelcomeView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // gemme sur halo — moment signature
+              // marque du produit, sans décor
               SizedBox(
                 height: 108,
                 width: 160,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: RadialGradient(
-                          colors: [
-                            const Color(0xFF2E6FD6).withValues(alpha: 0.20),
-                            const Color(0xFF2E6FD6).withValues(alpha: 0.0),
-                          ],
-                        ),
-                      ),
-                    ),
                     const JadeMark(size: 62),
                   ],
                 ),
@@ -758,7 +746,7 @@ class _ReplyChip extends StatelessWidget {
             color: jade.primaryContainer,
             borderRadius: JadeRadius.all(JadeRadius.pill),
             border: Border.all(
-                color: hover ? jade.primary : Colors.transparent),
+                color: hover ? jade.accent : Colors.transparent),
             boxShadow: hover ? JadeElevation.soft(context) : null,
           ),
           child: Text(text,
@@ -865,7 +853,7 @@ class _AssistantMarkdown extends StatelessWidget {
         tableBody: JadeType.label.copyWith(color: jade.body),
         tableCellsPadding: const EdgeInsets.symmetric(
             horizontal: JadeSpace.md, vertical: JadeSpace.sm),
-        a: TextStyle(color: jade.primary, fontWeight: FontWeight.w600),
+        a: TextStyle(color: jade.accent, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -984,7 +972,7 @@ class _FileCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(TablerIcons.externalLink,
-                    size: 15, color: hover ? Colors.white : jade.primary),
+                    size: 15, color: hover ? jade.onPrimary : jade.accent),
               ),
             ],
           ),
@@ -1198,8 +1186,8 @@ class _SendButton extends StatelessWidget {
         onTap: enabled ? onSend : null,
         child: AnimatedContainer(
           duration: context.motion(const Duration(milliseconds: 140)),
-          width: 38,
-          height: 38,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             color: enabled
                 ? (hover ? jade.primaryHover : jade.primary)
@@ -1207,7 +1195,7 @@ class _SendButton extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           child: Icon(TablerIcons.arrowUp,
-              size: 18, color: enabled ? Colors.white : jade.faint),
+              size: 18, color: enabled ? jade.onPrimary : jade.faint),
         ),
       ),
     );
