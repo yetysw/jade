@@ -184,7 +184,8 @@ class HomeScreenState extends State<HomeScreen> {
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Annuler')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: jade.danger),
+            style: FilledButton.styleFrom(
+                backgroundColor: jade.danger, foregroundColor: jade.onDanger),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Supprimer'),
           ),
@@ -283,7 +284,8 @@ class HomeScreenState extends State<HomeScreen> {
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Annuler')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: jade.danger),
+            style: FilledButton.styleFrom(
+                backgroundColor: jade.danger, foregroundColor: jade.onDanger),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Supprimer'),
           ),

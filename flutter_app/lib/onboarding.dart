@@ -563,7 +563,7 @@ class _OnboardingState extends State<_Onboarding> {
           width: active ? 20 : 8,
           height: 8,
           decoration: BoxDecoration(
-            color: active ? jade.primary : jade.border,
+            color: active ? jade.accent : jade.border,
             borderRadius: JadeRadius.all(JadeRadius.pill),
           ),
         );

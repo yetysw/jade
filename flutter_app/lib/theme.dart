@@ -33,6 +33,9 @@ class JadeColors extends ThemeExtension<JadeColors> {
   final Color danger; // pire cas : à utiliser avec parcimonie
   final Color ring; // anneau de focus clavier
 
+  /// Texte posé sur `danger` : sombre sur le rouge clair du thème sombre.
+  Color get onDanger => danger.computeLuminance() > 0.3 ? bg : onPrimary;
+
   const JadeColors({
     required this.bg,
     required this.panel,

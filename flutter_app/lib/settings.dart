@@ -305,7 +305,8 @@ class _SettingsViewState extends State<SettingsView> {
               child: const Text('Annuler')),
           FilledButton(
             style: FilledButton.styleFrom(
-                backgroundColor: danger ? jade.danger : jade.primary),
+                backgroundColor: danger ? jade.danger : jade.primary,
+                foregroundColor: danger ? jade.onDanger : jade.onPrimary),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(confirmLabel),
           ),
