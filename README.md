@@ -18,7 +18,7 @@
 - The documents never leave the machine. Only the question and a few short text excerpts go out, over HTTPS, to the inference server you configure (Ollama behind Cloudflare Access). Every outbound call is logged before it is sent.
 - It is a native Windows app (Flutter) that starts a local backend (Python, FastAPI) listening on `127.0.0.1` only.
 
-Free, for good. MIT licence, no paid edition.
+MIT licence. An optional licence server is included and off by default: see [Licensing](docs/licensing.md).
 
 ## Quick start
 
@@ -71,6 +71,6 @@ MIT, see [LICENSE](LICENSE). The software is provided as is, without warranty of
 
 ## Support jade
 
-jade is free. If it saves you time, you can support its development:
+jade is open source. If it saves you time, you can support its development:
 
 [Sponsor us on GitHub](https://github.com/sponsors/yetysw), recurring or one-off.

@@ -30,6 +30,7 @@ The app finds a running `jade serve` as a fallback. Install the `ocr` extra with
 
 ```bash
 cd flutter_app && flutter build windows --release
+cd ..
 python -m PyInstaller jade.spec --noconfirm
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer\jade.iss
 ```
