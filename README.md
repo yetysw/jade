@@ -6,8 +6,6 @@
 
 [Website](https://www.yety.ch) · [Documentation](docs/index.md) · [Sponsor](https://github.com/sponsors/yetysw)
 
-<br><br>
-
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
 
 </div>
