@@ -1,0 +1,8 @@
+[
+  {"label":"Get started","items":["install.md","first-run.md","backup.md"]},
+  {"label":"Using it","items":["ask.md","create-files.md","conversations.md"]},
+  {"label":"Reference","items":["configuration.md","ports-and-paths.md","cli.md"]},
+  {"label":"Security","items":["security.md"]},
+  {"label":"Operations","items":["updating.md","licensing.md","troubleshooting.md"]},
+  {"label":"Development","items":["building.md"]}
+]

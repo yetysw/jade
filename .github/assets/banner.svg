@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 280" role="img" aria-label="jade: a local-first document assistant for Windows">
+  <defs><pattern id="g" width="44" height="44" patternUnits="userSpaceOnUse"><path d="M44 0H0V44" fill="none" stroke="#ffffff" stroke-opacity=".05"/></pattern></defs>
+  <rect width="1280" height="280" rx="18" fill="#07080a"/>
+  <rect width="1280" height="280" rx="18" fill="url(#g)"/>
+  <g transform="translate(64 68) scale(2.25)"><rect width="64" height="64" rx="15" fill="#2e8b6e"/><path d="M20 14h16l10 10v26H20z" fill="none" stroke="#07080a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 14v10h10M27 33h12M27 41h8" fill="none" stroke="#07080a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <text x="236" y="132" fill="#eceef1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="60" font-weight="600" letter-spacing="-1.2">jade</text>
+  <text x="238" y="182" fill="#c9ccd1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="28">Ask your own documents. They stay on your PC.</text>
+  <text x="1216" y="244" text-anchor="end" fill="#8b9098" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17">a yety project</text>
+</svg>

@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not work as described.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems go to
+        https://github.com/yetysw/jade/security/advisories/new instead, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The installer version, or the commit if you run from source.
+      placeholder: 1.10.1
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Indexing and search
+        - Answers and sources
+        - File creation
+        - Web search
+        - Conversations and memory
+        - Installer and updates
+        - Licensing
+        - Interface
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        The diagnostic zip from "Give feedback" has no secret and no conversation content.
+        Redact addresses and names before pasting anything else.
+      render: text
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Windows version, workstation or RDS server, antivirus if the app does not start.
+      placeholder: Windows 11 23H2, workstation
