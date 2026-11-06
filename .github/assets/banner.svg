@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 280" role="img" aria-label="jade: A document assistant that cites its sources.">
+  <defs><pattern id="g" width="44" height="44" patternUnits="userSpaceOnUse"><path d="M44 0H0V44" fill="none" stroke="#ffffff" stroke-opacity=".05"/></pattern></defs>
+  <rect width="1280" height="280" rx="18" fill="#07080a"/>
+  <rect width="1280" height="280" rx="18" fill="url(#g)"/>
+  <g transform="translate(64 72) scale(2.1875)"><rect width="64" height="64" rx="15" fill="#111419"></rect><path d="M20 14H44L54 27 32 53 10 27Z" fill="#3ddc97"></path><path d="M10 27H54M25 14 20 27 32 53 44 27 39 14" fill="none" stroke="#111419" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></g>
+  <text x="228" y="134" fill="#eceef1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="60" font-weight="600" letter-spacing="-1.2">jade</text>
+  <text x="230" y="184" fill="#c9ccd1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="28">A document assistant that cites its sources.</text>
+  <text x="1216" y="244" text-anchor="end" fill="#8b9098" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17">a yety project</text>
+</svg>
