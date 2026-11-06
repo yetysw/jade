@@ -279,7 +279,7 @@ MarkdownStyleSheet jadeMarkdownStyleSheet(BuildContext context) {
     tableBody: JadeType.label.copyWith(color: jade.body),
     tableCellsPadding: const EdgeInsets.symmetric(
         horizontal: JadeSpace.md, vertical: JadeSpace.sm),
-    a: TextStyle(color: jade.primary, fontWeight: FontWeight.w600),
+    a: TextStyle(color: jade.accent, fontWeight: FontWeight.w600),
   );
 }
 

@@ -144,7 +144,7 @@ class _SourceCard extends StatelessWidget {
             borderRadius: JadeRadius.all(JadeRadius.md),
             border: Border.all(
                 color: selected
-                    ? jade.primary.withValues(alpha: 0.4)
+                    ? jade.accent.withValues(alpha: 0.4)
                     : (hover ? jade.borderStrong : jade.border)),
           ),
           child: Column(
@@ -163,7 +163,7 @@ class _SourceCard extends StatelessWidget {
                     child: Text('${s.n}',
                         style: JadeType.caption.merge(JadeType.tabular).copyWith(
                             fontWeight: FontWeight.w700,
-                            color: selected ? Colors.white : jade.body)),
+                            color: selected ? jade.onPrimary : jade.body)),
                   ),
                   const SizedBox(width: JadeSpace.sm + 1),
                   Expanded(
@@ -197,9 +197,9 @@ class _SourceCard extends StatelessWidget {
                   children: [
                     Text(s.web ? 'Consulter la page' : 'Ouvrir le fichier',
                         style: JadeType.caption.copyWith(
-                            color: jade.primary, fontWeight: FontWeight.w600)),
+                            color: jade.accent, fontWeight: FontWeight.w600)),
                     const SizedBox(width: JadeSpace.xs),
-                    Icon(TablerIcons.arrowRight, size: 12, color: jade.primary),
+                    Icon(TablerIcons.arrowRight, size: 12, color: jade.accent),
                   ],
                 ),
               ),
